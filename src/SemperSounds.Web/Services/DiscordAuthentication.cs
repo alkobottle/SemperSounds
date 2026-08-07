@@ -14,6 +14,9 @@ public static class DiscordAuthentication
     /// <summary>Claim holding the user's Discord avatar URL, for the app bar.</summary>
     public const string AvatarClaim = "urn:sempersounds:avatar";
 
+    /// <summary>Failure reason used to route a rejected non-member to the right page.</summary>
+    private const string NotAGuildMember = "NotAGuildMember";
+
     /// <summary>Reads the Discord user ID (a snowflake) out of the signed-in principal.</summary>
     public static ulong GetDiscordUserId(this ClaimsPrincipal principal) =>
         ulong.TryParse(principal.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : 0;
@@ -62,11 +65,25 @@ public static class DiscordAuthentication
                     {
                         // Failing the ticket here means a non-member never gets a cookie,
                         // rather than being filtered later on every request.
-                        context.Fail("NotAGuildMember");
+                        context.Fail(NotAGuildMember);
                         return;
                     }
 
                     AddAvatarClaim(context);
+                };
+
+                // Without this, every unusable callback throws an unhandled exception and
+                // the user gets a stack trace. That covers more than edge cases: hitting
+                // /signin-discord directly, refreshing it, using the back button after a
+                // completed login, letting the state expire -- and, most importantly, the
+                // non-member rejection above, whose friendly page would never be reached.
+                options.Events.OnRemoteFailure = context =>
+                {
+                    var isNonMember = context.Failure?.Message.Contains(NotAGuildMember, StringComparison.Ordinal) == true;
+
+                    context.Response.Redirect(isNonMember ? "/access-denied" : "/login-failed");
+                    context.HandleResponse();
+                    return Task.CompletedTask;
                 };
             });
 

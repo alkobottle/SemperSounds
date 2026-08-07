@@ -1,0 +1,15 @@
+@page "/login-failed"
+
+<PageTitle>Sign-in failed · SemperSounds</PageTitle>
+
+<MudPaper Class="pa-8" Elevation="2" Style="max-width: 560px; margin: 0 auto;">
+    <MudText Typo="Typo.h5" GutterBottom="true">Sign-in didn't complete</MudText>
+    <MudText Typo="Typo.body1" Class="mb-4">
+        That usually means the sign-in was left open too long, the page was refreshed
+        part-way through, or this address was opened directly rather than by Discord.
+        Starting again normally fixes it.
+    </MudText>
+    <MudButton Href="/login" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Login">
+        Sign in with Discord
+    </MudButton>
+</MudPaper>

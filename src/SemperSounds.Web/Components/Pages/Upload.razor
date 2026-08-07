@@ -18,15 +18,14 @@
             Anything longer is rejected. Volume is levelled automatically on upload.
         </MudAlert>
 
-        <MudFileUpload T="IBrowserFile" FilesChanged="OnFileChanged" Accept=".mp3,.wav,.ogg,.m4a,audio/*">
-            <ActivatorContent>
-                <MudButton Variant="Variant.Filled"
-                           Color="Color.Primary"
-                           StartIcon="@Icons.Material.Filled.AttachFile">
-                    @(_file?.Name ?? "Choose an audio file")
-                </MudButton>
-            </ActivatorContent>
-        </MudFileUpload>
+        <MudFileUpload T="IBrowserFile" FilesChanged="OnFileChanged" Accept=".mp3,.wav,.ogg,.m4a,audio/*" />
+
+        @if (_file is not null)
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                Selected: <b>@_file.Name</b> (@((_file.Size / 1024d).ToString("0")) KB)
+            </MudText>
+        }
 
         <MudTextField @bind-Value="_name"
                       Label="Name"
