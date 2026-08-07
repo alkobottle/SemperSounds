@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/SemperSounds.Core/SemperSounds.Core.csproj" />
+    <Project Path="src/SemperSounds.Web/SemperSounds.Web.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/SemperSounds.Tests/SemperSounds.Tests.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,26 @@
+## .NET build output
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+artifacts/
+*.user
+*.suo
+.vs/
+.idea/
+
+## Secrets and local configuration — never commit these
+appsettings.Development.json
+appsettings.Local.json
+.env
+
+## Runtime data: uploaded sounds and the SQLite database live on a volume,
+## not in the repository.
+data/
+*.db
+*.db-shm
+*.db-wal
+
+## OS noise
+Thumbs.db
+.DS_Store
