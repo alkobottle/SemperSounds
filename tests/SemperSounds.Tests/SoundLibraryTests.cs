@@ -151,6 +151,39 @@ public sealed class SoundLibraryTests : IDisposable
     }
 
     [Fact]
+    public async Task GetRecentPlays_OrdersNewestFirst_AgainstRealSqlite()
+    {
+        // Ordering by a DateTimeOffset column is not translatable by the SQLite provider,
+        // and the earlier tests missed it by querying the DbSet directly instead of going
+        // through this method. It only surfaced when the home page first rendered.
+        var library = CreateLibrary(new AudioProbeResult(true, TimeSpan.FromSeconds(1)));
+        var added = await library.AddAsync(Upload(), "beep.mp3", "Beep", "", 42, "alkobot");
+        var sound = added.Sound!;
+
+        await library.LogPlayAsync(sound, userId: 1, userName: "first", channelId: 99);
+        await Task.Delay(10);
+        await library.LogPlayAsync(sound, userId: 2, userName: "second", channelId: 99);
+
+        var recent = await library.GetRecentPlaysAsync(10);
+
+        Assert.Equal(2, recent.Count);
+        Assert.Equal("second", recent[0].UserName);
+        Assert.Equal("first", recent[1].UserName);
+    }
+
+    [Fact]
+    public async Task GetAll_OrdersByName_AgainstRealSqlite()
+    {
+        var library = CreateLibrary(new AudioProbeResult(true, TimeSpan.FromSeconds(1)));
+        await library.AddAsync(Upload(), "z.mp3", "Zebra", "", 42, "alkobot");
+        await library.AddAsync(Upload(), "a.mp3", "Airhorn", "", 42, "alkobot");
+
+        var all = await library.GetAllAsync();
+
+        Assert.Equal(["Airhorn", "Zebra"], all.Select(s => s.Name));
+    }
+
+    [Fact]
     public async Task PlayLog_SurvivesDeletionOfItsSound()
     {
         var library = CreateLibrary(new AudioProbeResult(true, TimeSpan.FromSeconds(1)));
