@@ -39,6 +39,16 @@ public sealed class SoundboardOptions
     [Range(0, 1440)]
     public int IdleLeaveMinutes { get; set; } = 10;
 
+    /// <summary>ffmpeg executable. Bare name resolves via PATH, which is how the container finds it.</summary>
+    public string FfmpegPath { get; set; } = "ffmpeg";
+
+    /// <summary>ffprobe executable.</summary>
+    public string FfprobePath { get; set; } = "ffprobe";
+
+    /// <summary>Upper bound on how long a single ffmpeg/ffprobe run may take before being killed.</summary>
+    [Range(1, 300)]
+    public int TranscodeTimeoutSeconds { get; set; } = 60;
+
     /// <summary>Directory holding the audio files, derived from <see cref="DataPath"/>.</summary>
     public string SoundsPath => Path.Combine(DataPath, "sounds");
 
