@@ -1,0 +1,122 @@
+@implements IDisposable
+@inject PlaybackService Playback
+@inject VoiceStateTracker VoiceStates
+@inject SoundboardEvents Events
+@inject ISnackbar Snackbar
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+@if (Playback.IsConnected)
+{
+    <MudChip T="string" Icon="@Icons.Material.Filled.VolumeUp" Color="Color.Success" Size="Size.Small">
+        @Playback.ConnectedChannelName
+    </MudChip>
+
+    <MudAvatarGroup Max="6" Spacing="2" Class="mx-2">
+        @foreach (var member in _members)
+        {
+            <MudTooltip Text="@member.DisplayName">
+                <MudAvatar Size="Size.Small">
+                    @if (member.AvatarUrl is not null)
+                    {
+                        <MudImage Src="@member.AvatarUrl" />
+                    }
+                    else
+                    {
+                        @member.DisplayName[0]
+                    }
+                </MudAvatar>
+            </MudTooltip>
+        }
+    </MudAvatarGroup>
+
+    <MudButton StartIcon="@Icons.Material.Filled.Stop"
+               Color="Color.Error"
+               Variant="Variant.Filled"
+               Size="Size.Small"
+               Class="mr-2"
+               OnClick="StopAll">
+        Stop all
+    </MudButton>
+
+    <MudButton StartIcon="@Icons.Material.Filled.CallEnd"
+               Color="Color.Inherit"
+               Size="Size.Small"
+               OnClick="Leave">
+        Leave
+    </MudButton>
+}
+else
+{
+    <MudChip T="string" Icon="@Icons.Material.Filled.VolumeOff" Color="Color.Default" Size="Size.Small">
+        not in voice
+    </MudChip>
+
+    <MudButton StartIcon="@Icons.Material.Filled.Login"
+               Color="Color.Primary"
+               Variant="Variant.Filled"
+               Size="Size.Small"
+               Disabled="_joining"
+               OnClick="Join">
+        Join my channel
+    </MudButton>
+}
+
+@code {
+    private IReadOnlyList<VoiceMember> _members = [];
+    private bool _joining;
+
+    protected override void OnInitialized()
+    {
+        Events.VoiceStateChanged += OnStateChanged;
+        Events.ConnectionChanged += OnStateChanged;
+        RefreshMembers();
+    }
+
+    private void OnStateChanged() => InvokeAsync(() =>
+    {
+        RefreshMembers();
+        StateHasChanged();
+    });
+
+    private void RefreshMembers() =>
+        _members = Playback.ConnectedChannelId is { } id ? VoiceStates.GetMembersIn(id) : [];
+
+    private async Task Join()
+    {
+        _joining = true;
+        try
+        {
+            var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var result = await Playback.JoinAsync(state.User.GetDiscordUserId());
+
+            if (!result.IsSuccess)
+            {
+                Snackbar.Add(result.Error, Severity.Warning);
+            }
+        }
+        finally
+        {
+            _joining = false;
+            RefreshMembers();
+        }
+    }
+
+    private async Task Leave()
+    {
+        await Playback.LeaveAsync();
+        RefreshMembers();
+    }
+
+    private void StopAll()
+    {
+        Playback.StopAll();
+        Snackbar.Add("Silenced everything", Severity.Info);
+    }
+
+    // A leaked handler here keeps the whole circuit alive, so unsubscribing is not optional.
+    public void Dispose()
+    {
+        Events.VoiceStateChanged -= OnStateChanged;
+        Events.ConnectionChanged -= OnStateChanged;
+    }
+}

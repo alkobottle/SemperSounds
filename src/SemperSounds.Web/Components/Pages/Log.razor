@@ -1,0 +1,43 @@
+@page "/log"
+@attribute [Authorize]
+@implements IDisposable
+@inject SoundLibrary Library
+@inject SoundboardEvents Events
+
+<PageTitle>Log · SemperSounds</PageTitle>
+
+<MudText Typo="Typo.h5" GutterBottom="true">Play log</MudText>
+
+<MudTable Items="_entries" Dense="true" Hover="true" Striped="true" Elevation="2">
+    <HeaderContent>
+        <MudTh>When</MudTh>
+        <MudTh>Who</MudTh>
+        <MudTh>Sound</MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd DataLabel="When">@context.PlayedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</MudTd>
+        <MudTd DataLabel="Who">@context.UserName</MudTd>
+        <MudTd DataLabel="Sound">@context.SoundName</MudTd>
+    </RowTemplate>
+    <NoRecordsContent>
+        <MudText Typo="Typo.body2">Nothing has been played yet.</MudText>
+    </NoRecordsContent>
+</MudTable>
+
+@code {
+    private List<PlayLogEntry> _entries = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        Events.SoundPlayed += OnSoundPlayed;
+        _entries = await Library.GetRecentPlaysAsync(500);
+    }
+
+    private void OnSoundPlayed(SoundPlayedNotification notification) => InvokeAsync(async () =>
+    {
+        _entries = await Library.GetRecentPlaysAsync(500);
+        StateHasChanged();
+    });
+
+    public void Dispose() => Events.SoundPlayed -= OnSoundPlayed;
+}

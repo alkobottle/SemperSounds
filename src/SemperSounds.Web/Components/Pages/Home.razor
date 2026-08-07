@@ -1,9 +1,299 @@
 @page "/"
+@attribute [Authorize]
+@implements IDisposable
+@inject SoundLibrary Library
+@inject PlaybackService Playback
+@inject SoundboardEvents Events
+@inject ISnackbar Snackbar
+@inject IDialogService Dialogs
+@inject AuthenticationStateProvider AuthenticationStateProvider
 
 <PageTitle>SemperSounds</PageTitle>
 
-<MudText Typo="Typo.h4" GutterBottom="true">Soundboard</MudText>
+<MudGrid>
+    <MudItem xs="12" md="9">
+        <div class="d-flex align-center gap-4 mb-4">
+            <MudTextField @bind-Value="_search"
+                          @bind-Value:after="ApplyFilter"
+                          Immediate="true"
+                          Placeholder="Search sounds..."
+                          Adornment="Adornment.Start"
+                          AdornmentIcon="@Icons.Material.Filled.Search"
+                          Variant="Variant.Outlined"
+                          Margin="Margin.Dense"
+                          Clearable="true" />
+            <MudText Typo="Typo.body2" Class="mud-text-secondary flex-shrink-0">
+                @_filtered.Count / @_all.Count
+            </MudText>
+        </div>
 
-<MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
-    Scaffold is up. The sound grid lands here once the library and playback services exist.
-</MudAlert>
+        @if (_allTags.Count > 0)
+        {
+            <MudChipSet T="string"
+                        @bind-SelectedValues="_selectedTags"
+                        @bind-SelectedValues:after="ApplyFilter"
+                        SelectionMode="SelectionMode.MultiSelection"
+                        Class="mb-4">
+                @foreach (var tag in _allTags)
+                {
+                    <MudChip T="string" Value="@tag" Size="Size.Small" Color="Color.Primary" Variant="Variant.Outlined">
+                        @tag
+                    </MudChip>
+                }
+            </MudChipSet>
+        }
+
+        @if (_loading)
+        {
+            <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+        }
+        else if (_filtered.Count == 0)
+        {
+            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+                @(_all.Count == 0
+                    ? "No sounds yet. Head to Upload and add the first one."
+                    : "Nothing matches that filter.")
+            </MudAlert>
+        }
+        else
+        {
+            <MudGrid Spacing="3">
+                @for (var i = 0; i < _filtered.Count; i++)
+                {
+                    var sound = _filtered[i];
+                    var hotkey = i < HotkeyOrder.Length ? HotkeyOrder[i].ToString() : null;
+
+                    <MudItem xs="6" sm="4" md="3" lg="2">
+                        <MudPaper Class="pa-3 d-flex flex-column" Style="height: 100%;" Elevation="2">
+                            <div class="d-flex align-center justify-space-between mb-1">
+                                <MudText Typo="Typo.subtitle2" Class="text-truncate" Title="@sound.Name">
+                                    @sound.Name
+                                </MudText>
+                                @if (hotkey is not null)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Class="ml-1">
+                                        @hotkey
+                                    </MudChip>
+                                }
+                            </div>
+
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary mb-2">
+                                @(sound.DurationMs / 1000.0).ToString("0.0")s · @sound.UploaderName
+                            </MudText>
+
+                            <MudSpacer />
+
+                            <div class="d-flex gap-1">
+                                <MudButton Variant="Variant.Filled"
+                                           Color="Color.Primary"
+                                           Size="Size.Small"
+                                           StartIcon="@Icons.Material.Filled.PlayArrow"
+                                           Disabled="!_canPlay"
+                                           OnClick="@(() => Play(sound))"
+                                           Class="flex-grow-1">
+                                    Play
+                                </MudButton>
+
+                                <MudTooltip Text="Preview in your browser only">
+                                    <MudIconButton Icon="@Icons.Material.Filled.Headphones"
+                                                   Size="Size.Small"
+                                                   OnClick="@(() => Preview(sound))" />
+                                </MudTooltip>
+
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                               Size="Size.Small"
+                                               Color="Color.Error"
+                                               OnClick="@(() => Delete(sound))" />
+                            </div>
+                        </MudPaper>
+                    </MudItem>
+                }
+            </MudGrid>
+        }
+    </MudItem>
+
+    <MudItem xs="12" md="3">
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudText Typo="Typo.subtitle1" Class="mb-2">Recent plays</MudText>
+            @if (_recent.Count == 0)
+            {
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">Nothing played yet.</MudText>
+            }
+            else
+            {
+                <MudList T="string" Dense="true">
+                    @foreach (var play in _recent)
+                    {
+                        <MudListItem T="string" Icon="@Icons.Material.Filled.MusicNote">
+                            <MudText Typo="Typo.body2"><b>@play.UserName</b> played @play.SoundName</MudText>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@play.PlayedAt.ToLocalTime().ToString("HH:mm:ss")</MudText>
+                        </MudListItem>
+                    }
+                </MudList>
+            }
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+@* Hidden element used to play previews locally without touching the voice channel. *@
+<audio @ref="_previewPlayer" style="display:none"></audio>
+
+@code {
+    /// <summary>Hotkeys bound to the first tiles, in the order they appear.</summary>
+    private static readonly char[] HotkeyOrder =
+        "1234567890qwertyuiopasdfghjklzxcvbnm".ToCharArray();
+
+    private List<Sound> _all = [];
+    private List<Sound> _filtered = [];
+    private List<string> _allTags = [];
+    private IReadOnlyCollection<string> _selectedTags = [];
+    private readonly List<SoundPlayedNotification> _recent = [];
+
+    private string _search = string.Empty;
+    private bool _loading = true;
+    private bool _canPlay;
+    private ulong _userId;
+    private string _userName = string.Empty;
+    private ElementReference _previewPlayer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        _userId = state.User.GetDiscordUserId();
+        _userName = state.User.GetDisplayName();
+
+        Events.SoundPlayed += OnSoundPlayed;
+        Events.LibraryChanged += OnLibraryChanged;
+        Events.ConnectionChanged += OnConnectionChanged;
+        Events.VoiceStateChanged += OnConnectionChanged;
+
+        await ReloadAsync();
+        UpdateCanPlay();
+        _loading = false;
+    }
+
+    private async Task ReloadAsync()
+    {
+        _all = await Library.GetAllAsync();
+        _allTags = [.. _all.SelectMany(s => s.TagList).Distinct().OrderBy(t => t)];
+        ApplyFilter();
+
+        foreach (var entry in await Library.GetRecentPlaysAsync(15))
+        {
+            _recent.Add(new SoundPlayedNotification(
+                entry.SoundId, entry.SoundName, entry.UserId, entry.UserName, entry.PlayedAt));
+        }
+    }
+
+    private void ApplyFilter()
+    {
+        IEnumerable<Sound> query = _all;
+
+        if (!string.IsNullOrWhiteSpace(_search))
+        {
+            query = query.Where(s => s.Name.Contains(_search, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (_selectedTags.Count > 0)
+        {
+            query = query.Where(s => _selectedTags.All(tag => s.TagList.Contains(tag)));
+        }
+
+        _filtered = [.. query];
+    }
+
+    private void UpdateCanPlay() =>
+        _canPlay = Playback.IsConnected;
+
+    private async Task Play(Sound sound)
+    {
+        var result = await Playback.PlayAsync(sound.Id, _userId, _userName);
+        if (!result.IsSuccess)
+        {
+            Snackbar.Add(result.Error, Severity.Warning);
+        }
+    }
+
+    private async Task Preview(Sound sound) =>
+        await JS.InvokeVoidAsync("semperSounds.preview", _previewPlayer, $"/sounds/{sound.Id}/preview");
+
+    private async Task Delete(Sound sound)
+    {
+        var confirmed = await Dialogs.ShowMessageBoxAsync(
+            "Delete sound",
+            $"Delete \"{sound.Name}\"? Everyone in the server can do this, and it cannot be undone.",
+            yesText: "Delete", cancelText: "Cancel");
+
+        if (confirmed != true)
+        {
+            return;
+        }
+
+        if (await Library.DeleteAsync(sound.Id))
+        {
+            Snackbar.Add($"Deleted {sound.Name}", Severity.Success);
+            Events.RaiseLibraryChanged();
+        }
+    }
+
+    private void OnSoundPlayed(SoundPlayedNotification notification) => InvokeAsync(() =>
+    {
+        _recent.Insert(0, notification);
+        if (_recent.Count > 15)
+        {
+            _recent.RemoveAt(_recent.Count - 1);
+        }
+        StateHasChanged();
+    });
+
+    private void OnLibraryChanged() => InvokeAsync(async () =>
+    {
+        _all = await Library.GetAllAsync();
+        _allTags = [.. _all.SelectMany(s => s.TagList).Distinct().OrderBy(t => t)];
+        ApplyFilter();
+        StateHasChanged();
+    });
+
+    private void OnConnectionChanged() => InvokeAsync(() =>
+    {
+        UpdateCanPlay();
+        StateHasChanged();
+    });
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _hotkeyRef = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("semperSounds.registerHotkeys", _hotkeyRef);
+        }
+    }
+
+    /// <summary>Fires the tile whose hotkey badge matches the pressed key.</summary>
+    [JSInvokable]
+    public async Task OnHotkey(string key)
+    {
+        var index = Array.IndexOf(HotkeyOrder, key.Length == 1 ? key[0] : '\0');
+
+        if (index < 0 || index >= _filtered.Count || !_canPlay)
+        {
+            return;
+        }
+
+        await Play(_filtered[index]);
+        StateHasChanged();
+    }
+
+    private DotNetObjectReference<Home>? _hotkeyRef;
+
+    [Inject] private IJSRuntime JS { get; set; } = default!;
+
+    public void Dispose()
+    {
+        Events.SoundPlayed -= OnSoundPlayed;
+        Events.LibraryChanged -= OnLibraryChanged;
+        Events.ConnectionChanged -= OnConnectionChanged;
+        Events.VoiceStateChanged -= OnConnectionChanged;
+        _hotkeyRef?.Dispose();
+    }
+}

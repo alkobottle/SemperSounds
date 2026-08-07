@@ -1,0 +1,124 @@
+@page "/upload"
+@attribute [Authorize]
+@inject SoundLibrary Library
+@inject SoundboardEvents Events
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject Microsoft.Extensions.Options.IOptions<SemperSounds.Core.Configuration.SoundboardOptions> Options
+
+<PageTitle>Upload · SemperSounds</PageTitle>
+
+<MudText Typo="Typo.h5" GutterBottom="true">Add a sound</MudText>
+
+<MudPaper Class="pa-6" Elevation="2" Style="max-width: 640px;">
+    <MudStack Spacing="4">
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+            Clips must be at most @Options.Value.MaxDurationSeconds.ToString("0.#") seconds.
+            Anything longer is rejected. Volume is levelled automatically on upload.
+        </MudAlert>
+
+        <MudFileUpload T="IBrowserFile" FilesChanged="OnFileChanged" Accept=".mp3,.wav,.ogg,.m4a,audio/*">
+            <ActivatorContent>
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.AttachFile">
+                    @(_file?.Name ?? "Choose an audio file")
+                </MudButton>
+            </ActivatorContent>
+        </MudFileUpload>
+
+        <MudTextField @bind-Value="_name"
+                      Label="Name"
+                      Variant="Variant.Outlined"
+                      HelperText="Leave blank to use the file name" />
+
+        <MudTextField @bind-Value="_tags"
+                      Label="Tags"
+                      Variant="Variant.Outlined"
+                      HelperText="Comma separated, e.g. meme, valorant, loud" />
+
+        @if (_uploading)
+        {
+            <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+        }
+
+        @if (!string.IsNullOrEmpty(_error))
+        {
+            <MudAlert Severity="Severity.Error" Variant="Variant.Filled">@_error</MudAlert>
+        }
+
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Success"
+                   StartIcon="@Icons.Material.Filled.CloudUpload"
+                   Disabled="_file is null || _uploading"
+                   OnClick="Submit">
+            Upload
+        </MudButton>
+    </MudStack>
+</MudPaper>
+
+@code {
+    private IBrowserFile? _file;
+    private string _name = string.Empty;
+    private string _tags = string.Empty;
+    private string _error = string.Empty;
+    private bool _uploading;
+
+    private void OnFileChanged(IBrowserFile? file)
+    {
+        _file = file;
+        _error = string.Empty;
+
+        if (file is not null && string.IsNullOrWhiteSpace(_name))
+        {
+            _name = Path.GetFileNameWithoutExtension(file.Name);
+        }
+    }
+
+    private async Task Submit()
+    {
+        if (_file is null)
+        {
+            return;
+        }
+
+        _uploading = true;
+        _error = string.Empty;
+
+        try
+        {
+            var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+
+            // OpenReadStream needs an explicit ceiling; its default is 512 KB, which would
+            // truncate most uploads. The real limit is enforced again server-side.
+            await using var stream = _file.OpenReadStream(Options.Value.MaxUploadBytes);
+
+            var result = await Library.AddAsync(
+                stream,
+                _file.Name,
+                _name,
+                _tags,
+                state.User.GetDiscordUserId(),
+                state.User.GetDisplayName());
+
+            if (!result.IsSuccess)
+            {
+                _error = result.Error;
+                return;
+            }
+
+            Events.RaiseLibraryChanged();
+            Snackbar.Add($"Added {result.Sound!.Name}", Severity.Success);
+            Navigation.NavigateTo("/");
+        }
+        catch (IOException ex)
+        {
+            _error = $"Upload failed: {ex.Message}";
+        }
+        finally
+        {
+            _uploading = false;
+        }
+    }
+}

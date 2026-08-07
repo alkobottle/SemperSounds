@@ -1,0 +1,15 @@
+@inject NavigationManager Navigation
+
+@code {
+    protected override void OnInitialized()
+    {
+        var returnUrl = Uri.EscapeDataString(
+            Navigation.ToBaseRelativePath(Navigation.Uri) is var relative && relative.Length > 0
+                ? $"/{relative}"
+                : "/");
+
+        // forceLoad because /login is a server endpoint that issues the OAuth challenge,
+        // not a routable Blazor page.
+        Navigation.NavigateTo($"/login?returnUrl={returnUrl}", forceLoad: true);
+    }
+}

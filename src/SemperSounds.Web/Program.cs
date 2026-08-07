@@ -1,6 +1,16 @@
+using AspNet.Security.OAuth.Discord;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using MudBlazor.Services;
+using SemperSounds.Core.Audio;
 using SemperSounds.Core.Configuration;
+using SemperSounds.Core.Data;
+using SemperSounds.Core.Sounds;
 using SemperSounds.Web.Components;
+using SemperSounds.Web.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -12,6 +22,10 @@ builder.Services.AddOptions<DiscordOptions>()
     .ValidateDataAnnotations()
     .ValidateOnStart();
 
+// Catches a placeholder or mistyped token at startup with an actionable message,
+// instead of an ArgumentException thrown from inside DI construction.
+builder.Services.AddSingleton<IValidateOptions<DiscordOptions>, DiscordOptionsValidator>();
+
 builder.Services.AddOptions<SoundboardOptions>()
     .Bind(builder.Configuration.GetSection(SoundboardOptions.SectionName))
     .ValidateDataAnnotations()
@@ -20,12 +34,55 @@ builder.Services.AddOptions<SoundboardOptions>()
 builder.Services.AddOptions<AppOptions>()
     .Bind(builder.Configuration.GetSection(AppOptions.SectionName));
 
+var soundboardOptions = builder.Configuration.GetSection(SoundboardOptions.SectionName).Get<SoundboardOptions>()
+    ?? new SoundboardOptions();
+
+Directory.CreateDirectory(soundboardOptions.DataPath);
+Directory.CreateDirectory(soundboardOptions.SoundsPath);
+
+builder.Services.AddDbContext<SoundboardDbContext>(options =>
+    options.UseSqlite($"Data Source={soundboardOptions.DatabasePath}"));
+
+// Audio pipeline. The ffmpeg wrappers sit behind interfaces so upload validation
+// stays testable without spawning processes.
+builder.Services.AddScoped<IAudioProbe, FfmpegAudioProbe>();
+builder.Services.AddScoped<IAudioTranscoder, FfmpegAudioTranscoder>();
+builder.Services.AddScoped<UploadValidator>();
+builder.Services.AddScoped<SoundLibrary>();
+
+// Discord side. All singletons: one gateway connection and one voice connection
+// serve every browser session.
+builder.Services.AddSingleton<SoundboardEvents>();
+builder.Services.AddSingleton<DiscordBotService>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<DiscordBotService>());
+builder.Services.AddSingleton<VoiceStateTracker>();
+builder.Services.AddSingleton<PlaybackService>();
+
+builder.Services.AddSemperSoundsAuthentication(builder.Configuration);
+
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
 builder.Services.AddMudServices();
 
 var app = builder.Build();
+
+// Must run before authentication: behind a TLS-terminating proxy the app would
+// otherwise build an http:// OAuth redirect_uri and Discord would reject it.
+var forwardedHeaders = new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto,
+};
+// The proxy is not known by address in a container network, so accept from any hop.
+forwardedHeaders.KnownNetworks.Clear();
+forwardedHeaders.KnownProxies.Clear();
+app.UseForwardedHeaders();
+
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<SoundboardDbContext>();
+    await db.Database.MigrateAsync();
+}
 
 if (!app.Environment.IsDevelopment())
 {
@@ -35,6 +92,8 @@ if (!app.Environment.IsDevelopment())
 
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
 
+app.UseAuthentication();
+app.UseAuthorization();
 app.UseAntiforgery();
 
 app.MapStaticAssets();
@@ -42,5 +101,32 @@ app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
 app.MapGet("/healthz", () => Results.Ok(new { status = "ok" }));
+
+app.MapGet("/login", (string? returnUrl) =>
+    Results.Challenge(
+        new AuthenticationProperties { RedirectUri = returnUrl ?? "/" },
+        [DiscordAuthenticationDefaults.AuthenticationScheme]));
+
+app.MapPost("/logout", () =>
+    Results.SignOut(
+        new AuthenticationProperties { RedirectUri = "/" },
+        [CookieAuthenticationDefaults.AuthenticationScheme]));
+
+// Serves the normalized mp3 for in-browser preview. Signed-in guild members only,
+// so the library is not a public file host.
+app.MapGet("/sounds/{id:guid}/preview", async (
+    Guid id, SoundLibrary library, IOptions<SoundboardOptions> options, CancellationToken cancellationToken) =>
+{
+    var sound = await library.FindAsync(id, cancellationToken);
+    if (sound is null)
+    {
+        return Results.NotFound();
+    }
+
+    var path = Path.Combine(options.Value.SoundsPath, sound.PreviewFileName);
+    return File.Exists(path)
+        ? Results.File(path, "audio/mpeg", enableRangeProcessing: true)
+        : Results.NotFound();
+}).RequireAuthorization();
 
 app.Run();

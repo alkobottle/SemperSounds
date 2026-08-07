@@ -1,0 +1,14 @@
+@page "/access-denied"
+
+<PageTitle>No access · SemperSounds</PageTitle>
+
+<MudPaper Class="pa-8" Elevation="2" Style="max-width: 560px; margin: 0 auto;">
+    <MudText Typo="Typo.h5" GutterBottom="true">Not a member</MudText>
+    <MudText Typo="Typo.body1" Class="mb-4">
+        This soundboard is only for members of the Discord server it belongs to.
+        Your Discord account is not in that server, so there is nothing here for you.
+    </MudText>
+    <MudButton Href="/login" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Login">
+        Try another account
+    </MudButton>
+</MudPaper>

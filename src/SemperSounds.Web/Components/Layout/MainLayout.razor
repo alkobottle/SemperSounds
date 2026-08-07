@@ -12,11 +12,41 @@
         <MudIcon Icon="@Icons.Material.Filled.GraphicEq" Class="mr-3" />
         <MudText Typo="Typo.h6" Class="mr-6">SemperSounds</MudText>
 
-        <MudButton Href="/" StartIcon="@Icons.Material.Filled.Apps" Color="Color.Inherit">Board</MudButton>
-        <MudButton Href="/upload" StartIcon="@Icons.Material.Filled.Upload" Color="Color.Inherit">Upload</MudButton>
-        <MudButton Href="/log" StartIcon="@Icons.Material.Filled.History" Color="Color.Inherit">Log</MudButton>
+        <AuthorizeView>
+            <Authorized>
+                <MudButton Href="/" StartIcon="@Icons.Material.Filled.Apps" Color="Color.Inherit">Board</MudButton>
+                <MudButton Href="/upload" StartIcon="@Icons.Material.Filled.Upload" Color="Color.Inherit">Upload</MudButton>
+                <MudButton Href="/log" StartIcon="@Icons.Material.Filled.History" Color="Color.Inherit">Log</MudButton>
 
-        <MudSpacer />
+                <MudSpacer />
+
+                <VoiceBar />
+
+                <MudTooltip Text="@context.User.GetDisplayName()">
+                    <MudAvatar Size="Size.Small" Class="ml-4">
+                        @if (context.User.GetAvatarUrl() is { } avatar)
+                        {
+                            <MudImage Src="@avatar" />
+                        }
+                        else
+                        {
+                            @context.User.GetDisplayName()[0]
+                        }
+                    </MudAvatar>
+                </MudTooltip>
+
+                <form action="/logout" method="post" class="d-flex">
+                    <AntiforgeryToken />
+                    <MudIconButton Icon="@Icons.Material.Filled.Logout"
+                                   Color="Color.Inherit"
+                                   ButtonType="ButtonType.Submit"
+                                   Title="Sign out" />
+                </form>
+            </Authorized>
+            <NotAuthorized>
+                <MudSpacer />
+            </NotAuthorized>
+        </AuthorizeView>
     </MudAppBar>
 
     <MudMainContent>
