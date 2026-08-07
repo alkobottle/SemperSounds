@@ -1,0 +1,15 @@
+**/bin/
+**/obj/
+**/.vs/
+**/.idea/
+.git/
+.gitignore
+data/
+*.db
+*.db-shm
+*.db-wal
+.env
+**/appsettings.Development.json
+**/appsettings.Local.json
+docs/
+README.md

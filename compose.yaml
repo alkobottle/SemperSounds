@@ -1,0 +1,23 @@
+services:
+  sempersounds:
+    build: .
+    image: sempersounds:latest
+    container_name: sempersounds
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # Secrets come from .env; everything with a sensible default stays here.
+      Soundboard__DataPath: /data
+      Soundboard__MaxDurationSeconds: "5"
+      Soundboard__MaxUploadBytes: "10485760"
+      # Anti-spam valve. 0 disables it; raise if someone abuses the airhorn.
+      Soundboard__PerUserCooldownSeconds: "0"
+      Soundboard__IdleLeaveMinutes: "10"
+    volumes:
+      # Uploaded sounds and the SQLite database. Without this, everything is lost
+      # on the next container rebuild.
+      - ./data:/data
+    ports:
+      # Bound to loopback: the reverse proxy in front of this is what faces the
+      # internet. Change to "8080:8080" only if nothing else terminates TLS.
+      - "127.0.0.1:8080:8080"

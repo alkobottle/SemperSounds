@@ -76,7 +76,21 @@ var forwardedHeaders = new ForwardedHeadersOptions
 // The proxy is not known by address in a container network, so accept from any hop.
 forwardedHeaders.KnownNetworks.Clear();
 forwardedHeaders.KnownProxies.Clear();
-app.UseForwardedHeaders();
+app.UseForwardedHeaders(forwardedHeaders);
+
+// When the public URL is pinned, rewrite scheme and host on the way in. Every URL the
+// app generates then matches what Discord has registered — including the redirect_uri
+// sent during the token exchange, which a redirect-only fix would miss.
+var appOptions = app.Services.GetRequiredService<IOptions<AppOptions>>().Value;
+if (appOptions.HasPublicBaseUrl && Uri.TryCreate(appOptions.PublicBaseUrl, UriKind.Absolute, out var publicUri))
+{
+    app.Use((context, next) =>
+    {
+        context.Request.Scheme = publicUri.Scheme;
+        context.Request.Host = new HostString(publicUri.Authority);
+        return next();
+    });
+}
 
 using (var scope = app.Services.CreateScope())
 {
