@@ -17,15 +17,20 @@ RUN dotnet publish src/SemperSounds.Web/SemperSounds.Web.csproj \
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 
-# ffmpeg   - upload duration probing, loudness normalization, PCM conversion
-# libopus  - NetCord encodes voice frames through it
-# libsodium - NetCord's voice encryption
-# None of these are NuGet packages; without them voice fails at runtime, not build.
+# ffmpeg      - upload duration probing, loudness normalization, PCM conversion
+# libopus-dev - NetCord encodes voice frames through libopus. The -dev package rather
+#               than libopus0 specifically because libopus0 installs only the versioned
+#               libopus.so.0, while .NET's P/Invoke probing looks for the unversioned
+#               libopus.so that only -dev provides.
+# curl        - used by HEALTHCHECK below; not present in the runtime image.
+#
+# libsodium and libdave deliberately do NOT come from apt: libdave is not in Debian at
+# all, and both arrive as NuGet native assets under runtimes/linux-x64/. Getting this
+# wrong fails at runtime on the first voice join, not at build time.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         ffmpeg \
-        libopus0 \
-        libsodium23 \
+        libopus-dev \
         curl \
     && rm -rf /var/lib/apt/lists/*
 

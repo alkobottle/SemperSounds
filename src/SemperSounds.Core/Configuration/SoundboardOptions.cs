@@ -49,9 +49,17 @@ public sealed class SoundboardOptions
     [Range(1, 300)]
     public int TranscodeTimeoutSeconds { get; set; } = 60;
 
+    /// <summary>
+    /// <see cref="DataPath"/> resolved to an absolute path.
+    /// Development config uses a relative "./data", and a relative path is not merely
+    /// untidy: Results.File() treats non-rooted paths as virtual paths under wwwroot,
+    /// so previews 404 even though the file is sitting right there on disk.
+    /// </summary>
+    public string RootedDataPath => Path.GetFullPath(DataPath);
+
     /// <summary>Directory holding the audio files, derived from <see cref="DataPath"/>.</summary>
-    public string SoundsPath => Path.Combine(DataPath, "sounds");
+    public string SoundsPath => Path.Combine(RootedDataPath, "sounds");
 
     /// <summary>Full path to the SQLite database file, derived from <see cref="DataPath"/>.</summary>
-    public string DatabasePath => Path.Combine(DataPath, "sempersounds.db");
+    public string DatabasePath => Path.Combine(RootedDataPath, "sempersounds.db");
 }

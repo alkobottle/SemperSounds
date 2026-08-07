@@ -138,8 +138,12 @@ app.MapGet("/sounds/{id:guid}/preview", async (
     }
 
     var path = Path.Combine(options.Value.SoundsPath, sound.PreviewFileName);
+
+    // GetFullPath is load-bearing: Results.File serves a file from disk only when the
+    // path is rooted, and silently reinterprets a relative one as a virtual path under
+    // wwwroot. SoundsPath is already rooted; this keeps it true no matter what.
     return File.Exists(path)
-        ? Results.File(path, "audio/mpeg", enableRangeProcessing: true)
+        ? Results.File(Path.GetFullPath(path), "audio/mpeg", enableRangeProcessing: true)
         : Results.NotFound();
 }).RequireAuthorization();
 

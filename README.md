@@ -72,6 +72,20 @@ dotnet run --project src/SemperSounds.Web
 **ffmpeg and ffprobe must be on your PATH** for uploads to work locally. The container
 already has them. On Windows: `winget install Gyan.FFmpeg`.
 
+### Native voice libraries
+
+NetCord calls into three native libraries, and voice fails at runtime without them:
+
+| Library | Where it comes from | Why |
+|---|---|---|
+| libdave | `libdave` NuGet package | Discord's E2EE voice protocol. NetCord loads it unconditionally — there is no way to turn it off, and it is not in any Linux distro repo. |
+| libsodium | `libsodium` NuGet package | Voice encryption. Official package by libsodium's author. |
+| opus | `OpusDotNet.opus.win-x64` on Windows, `libopus-dev` in the container | Opus encoding of voice frames. |
+
+All three ship as `runtimes/<rid>/native/` assets, so a plain `dotnet run` picks them up.
+In the container, opus comes from apt: use `libopus-dev` and not `libopus0`, since the
+latter installs only `libopus.so.0` while .NET probes for the unversioned `libopus.so`.
+
 Leave `App__PublicBaseUrl` empty in development so Kestrel's own URL is used.
 
 ```bash
