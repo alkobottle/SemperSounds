@@ -36,6 +36,7 @@ public sealed class SoundLibrary(
         string tags,
         ulong uploaderId,
         string uploaderName,
+        string emoji = "",
         CancellationToken cancellationToken = default)
     {
         Directory.CreateDirectory(_options.SoundsPath);
@@ -46,6 +47,9 @@ public sealed class SoundLibrary(
                 ? Path.GetFileNameWithoutExtension(originalFileName)
                 : displayName.Trim(),
             Tags = NormalizeTags(tags),
+            // Normalized rather than trusted: keeps "every sound has an emoji" true no
+            // matter which caller is involved, not only the upload form.
+            Emoji = SoundEmoji.Normalize(emoji),
             UploaderId = uploaderId,
             UploaderName = uploaderName,
         };
@@ -126,7 +130,9 @@ public sealed class SoundLibrary(
         return true;
     }
 
-    public async Task<bool> RenameAsync(Guid id, string newName, string newTags, CancellationToken cancellationToken = default)
+    /// <summary>Edits a sound's presentation. Open to any signed-in member, like deleting.</summary>
+    public async Task<bool> UpdateAsync(
+        Guid id, string newName, string newTags, string newEmoji, CancellationToken cancellationToken = default)
     {
         var sound = await db.Sounds.FirstOrDefaultAsync(s => s.Id == id, cancellationToken);
         if (sound is null || string.IsNullOrWhiteSpace(newName))
@@ -136,6 +142,7 @@ public sealed class SoundLibrary(
 
         sound.Name = newName.Trim();
         sound.Tags = NormalizeTags(newTags);
+        sound.Emoji = SoundEmoji.Normalize(newEmoji);
         await db.SaveChangesAsync(cancellationToken);
         return true;
     }

@@ -1,0 +1,33 @@
+@using SemperSounds.Core.Sounds
+
+@* Renders a stored emoji: custom ones as a CDN image, standard ones as text.
+   Falls back to :name: if a custom emoji has been deleted from the server and its
+   image no longer loads, rather than showing a broken-image icon. *@
+
+@if (_emoji.IsCustom && _emoji.ImageUrl is { } url)
+{
+    <img src="@url"
+         alt="@_emoji.Display"
+         title="@_emoji.Display"
+         width="@Size" height="@Size"
+         loading="lazy"
+         style="object-fit: contain; vertical-align: middle;" />
+}
+else
+{
+    <span style="font-size: @(Size)px; line-height: 1;">@_emoji.Display</span>
+}
+
+@code {
+    [Parameter, EditorRequired] public string Value { get; set; } = SoundEmoji.DefaultEmoji;
+
+    /// <summary>Rendered size in pixels, matching for both image and text forms.</summary>
+    [Parameter] public int Size { get; set; } = 24;
+
+    private SoundEmoji _emoji;
+
+    protected override void OnParametersSet() =>
+        _emoji = SoundEmoji.TryParse(Value, out var parsed)
+            ? parsed
+            : SoundEmoji.Parse(SoundEmoji.DefaultEmoji);
+}

@@ -1,0 +1,108 @@
+@using SemperSounds.Core.Sounds
+@inject GuildEmojiProvider GuildEmojis
+
+<MudMenu ActivationEvent="MouseEvent.LeftClick" AnchorOrigin="Origin.BottomLeft" TransformOrigin="Origin.TopLeft">
+    <ActivatorContent>
+        <MudButton Variant="Variant.Outlined" Class="pa-2" Style="min-width: 64px;">
+            <SoundEmojiView Value="@Value" Size="28" />
+            <MudIcon Icon="@Icons.Material.Filled.ArrowDropDown" Size="Size.Small" />
+        </MudButton>
+    </ActivatorContent>
+    <ChildContent>
+        <div style="width: 320px; max-height: 380px; overflow-y: auto;" class="pa-3">
+
+            @if (_guildEmojis.Count > 0)
+            {
+                <MudText Typo="Typo.overline">@_guildEmojis.Count server emoji</MudText>
+                <div class="d-flex flex-wrap gap-1 mb-3">
+                    @foreach (var emoji in _guildEmojis)
+                    {
+                        <MudTooltip Text="@($":{emoji.Name}:")">
+                            <MudIconButton Size="Size.Small" OnClick="@(() => Select(emoji.Raw))">
+                                <img src="@emoji.ImageUrl" alt="@emoji.Name" width="22" height="22"
+                                     loading="lazy" style="object-fit: contain;" />
+                            </MudIconButton>
+                        </MudTooltip>
+                    }
+                </div>
+            }
+            else
+            {
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    No server emoji available — the bot may still be connecting.
+                </MudText>
+            }
+
+            <MudText Typo="Typo.overline">Common</MudText>
+            <div class="d-flex flex-wrap gap-1 mb-3">
+                @foreach (var emoji in CommonEmoji)
+                {
+                    <MudIconButton Size="Size.Small" OnClick="@(() => Select(emoji))">
+                        <span style="font-size: 20px; line-height: 1;">@emoji</span>
+                    </MudIconButton>
+                }
+            </div>
+
+            <MudTextField T="string"
+                          @bind-Value="_pasted"
+                          @bind-Value:after="ApplyPasted"
+                          Immediate="true"
+                          Label="Or paste any emoji"
+                          HelperText="Win + . opens the system emoji picker"
+                          Variant="Variant.Outlined"
+                          Margin="Margin.Dense" />
+
+            @if (_pasteError)
+            {
+                <MudText Typo="Typo.caption" Color="Color.Error">That is not an emoji.</MudText>
+            }
+        </div>
+    </ChildContent>
+</MudMenu>
+
+@code {
+    /// <summary>A small curated set. The paste field covers everything else, so shipping
+    /// a full emoji database would be weight for no real gain.</summary>
+    private static readonly string[] CommonEmoji =
+    [
+        "🔥", "😂", "💀", "📣", "🎺", "🚨", "🤡", "👏", "🎉", "💥",
+        "🙃", "😱", "🤬", "🥁", "🎵", "🔔", "😴", "🫠", "👀", "🧠",
+        "🐸", "🦆", "🐄", "🚀", "⚡", "💣", "🍆", "🥴", "😤", "🤔",
+        "❤️", "✅", "❌", "⭐", "🎯", "🏆", "🪦", "🫡", "😭", "🙏",
+    ];
+
+    [Parameter, EditorRequired] public string Value { get; set; } = SoundEmoji.DefaultEmoji;
+    [Parameter] public EventCallback<string> ValueChanged { get; set; }
+
+    private IReadOnlyList<GuildEmoji> _guildEmojis = [];
+    private string _pasted = string.Empty;
+    private bool _pasteError;
+
+    protected override void OnInitialized() => _guildEmojis = GuildEmojis.GetAll();
+
+    private async Task Select(string raw)
+    {
+        _pasteError = false;
+        await ValueChanged.InvokeAsync(raw);
+    }
+
+    private async Task ApplyPasted()
+    {
+        if (string.IsNullOrWhiteSpace(_pasted))
+        {
+            _pasteError = false;
+            return;
+        }
+
+        if (SoundEmoji.TryParse(_pasted, out var emoji))
+        {
+            _pasteError = false;
+            _pasted = string.Empty;
+            await ValueChanged.InvokeAsync(emoji.Raw);
+        }
+        else
+        {
+            _pasteError = true;
+        }
+    }
+}

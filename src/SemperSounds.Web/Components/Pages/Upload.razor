@@ -27,10 +27,14 @@
             </MudText>
         }
 
-        <MudTextField @bind-Value="_name"
-                      Label="Name"
-                      Variant="Variant.Outlined"
-                      HelperText="Leave blank to use the file name" />
+        <div class="d-flex align-center gap-4">
+            <EmojiPicker Value="@_emoji" ValueChanged="@(value => _emoji = value)" />
+            <MudTextField @bind-Value="_name"
+                          Label="Name"
+                          Variant="Variant.Outlined"
+                          HelperText="Leave blank to use the file name"
+                          Class="flex-grow-1" />
+        </div>
 
         <MudTextField @bind-Value="_tags"
                       Label="Tags"
@@ -61,6 +65,7 @@
     private IBrowserFile? _file;
     private string _name = string.Empty;
     private string _tags = string.Empty;
+    private string _emoji = SemperSounds.Core.Sounds.SoundEmoji.DefaultEmoji;
     private string _error = string.Empty;
     private bool _uploading;
 
@@ -99,7 +104,8 @@
                 _name,
                 _tags,
                 state.User.GetDiscordUserId(),
-                state.User.GetDisplayName());
+                state.User.GetDisplayName(),
+                _emoji);
 
             if (!result.IsSuccess)
             {

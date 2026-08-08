@@ -56,6 +56,7 @@ builder.Services.AddSingleton<SoundboardEvents>();
 builder.Services.AddSingleton<DiscordBotService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<DiscordBotService>());
 builder.Services.AddSingleton<VoiceStateTracker>();
+builder.Services.AddSingleton<GuildEmojiProvider>();
 builder.Services.AddSingleton<PlaybackService>();
 
 builder.Services.AddSemperSoundsAuthentication(builder.Configuration);

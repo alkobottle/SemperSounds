@@ -137,6 +137,43 @@ public sealed class SoundLibraryTests : IDisposable
     }
 
     [Fact]
+    public async Task UploadWithoutEmoji_GetsTheDefault()
+    {
+        var library = CreateLibrary(new AudioProbeResult(true, TimeSpan.FromSeconds(1)));
+
+        var result = await library.AddAsync(Upload(), "beep.mp3", "Beep", "", 42, "alkobot");
+
+        Assert.Equal(SoundEmoji.DefaultEmoji, result.Sound!.Emoji);
+    }
+
+    [Fact]
+    public async Task Update_PersistsEmojiNameAndTags()
+    {
+        var library = CreateLibrary(new AudioProbeResult(true, TimeSpan.FromSeconds(1)));
+        var added = await library.AddAsync(Upload(), "beep.mp3", "Beep", "old", 42, "alkobot");
+
+        var updated = await library.UpdateAsync(added.Sound!.Id, "Airhorn", "meme, loud", "<:kekw:123>");
+
+        Assert.True(updated);
+        var stored = Assert.Single(await _db.Sounds.ToListAsync());
+        Assert.Equal("Airhorn", stored.Name);
+        Assert.Equal("meme,loud", stored.Tags);
+        Assert.Equal("<:kekw:123>", stored.Emoji);
+    }
+
+    [Fact]
+    public async Task Update_WithGarbageEmoji_FallsBackToDefaultRatherThanStoringIt()
+    {
+        var library = CreateLibrary(new AudioProbeResult(true, TimeSpan.FromSeconds(1)));
+        var added = await library.AddAsync(Upload(), "beep.mp3", "Beep", "", 42, "alkobot", "🔥");
+
+        await library.UpdateAsync(added.Sound!.Id, "Beep", "", "definitely not an emoji");
+
+        var stored = Assert.Single(await _db.Sounds.ToListAsync());
+        Assert.Equal(SoundEmoji.DefaultEmoji, stored.Emoji);
+    }
+
+    [Fact]
     public async Task Delete_RemovesRowAndFiles()
     {
         var library = CreateLibrary(new AudioProbeResult(true, TimeSpan.FromSeconds(1)));

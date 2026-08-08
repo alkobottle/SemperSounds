@@ -65,27 +65,31 @@
 
                     <MudItem xs="6" sm="4" md="3" lg="2">
                         <MudPaper Class="pa-3 d-flex flex-column" Style="height: 100%;" Elevation="2">
-                            <div class="d-flex align-center justify-space-between mb-1">
-                                <MudText Typo="Typo.subtitle2" Class="text-truncate" title="@sound.Name">
-                                    @sound.Name
-                                </MudText>
+                            <div class="d-flex align-center mb-1" style="gap: 10px;">
+                                <SoundEmojiView Value="@sound.Emoji" Size="34" />
+
+                                <div class="flex-grow-1" style="min-width: 0;">
+                                    <MudText Typo="Typo.subtitle2" Class="text-truncate" title="@sound.Name">
+                                        @sound.Name
+                                    </MudText>
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                        @* The whole expression must sit inside @(...): a trailing .ToString()
+                                           after the closing paren is emitted as literal text. *@
+                                        @((sound.DurationMs / 1000.0).ToString("0.0"))s · @sound.UploaderName
+                                    </MudText>
+                                </div>
+
                                 @if (hotkey is not null)
                                 {
-                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Class="ml-1">
+                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">
                                         @hotkey
                                     </MudChip>
                                 }
                             </div>
 
-                            <MudText Typo="Typo.caption" Class="mud-text-secondary mb-2">
-                                @* The whole expression must sit inside @(...): a trailing .ToString()
-                                   after the closing paren is emitted as literal text. *@
-                                @((sound.DurationMs / 1000.0).ToString("0.0"))s · @sound.UploaderName
-                            </MudText>
-
                             <MudSpacer />
 
-                            <div class="d-flex gap-1">
+                            <div class="d-flex gap-1 mt-2">
                                 <MudButton Variant="Variant.Filled"
                                            Color="Color.Primary"
                                            Size="Size.Small"
@@ -100,6 +104,12 @@
                                     <MudIconButton Icon="@Icons.Material.Filled.Headphones"
                                                    Size="Size.Small"
                                                    OnClick="@(() => Preview(sound))" />
+                                </MudTooltip>
+
+                                <MudTooltip Text="Edit emoji, name and tags">
+                                    <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                                   Size="Size.Small"
+                                                   OnClick="@(() => Edit(sound))" />
                                 </MudTooltip>
 
                                 <MudIconButton Icon="@Icons.Material.Filled.Delete"
@@ -193,7 +203,14 @@
 
         if (!string.IsNullOrWhiteSpace(_search))
         {
-            query = query.Where(s => s.Name.Contains(_search, StringComparison.OrdinalIgnoreCase));
+            var term = _search.Trim();
+
+            // Matching the custom emoji's name is what makes emoji findable at all:
+            // you cannot type :kekw: into the box, but you can type "kekw".
+            query = query.Where(s =>
+                s.Name.Contains(term, StringComparison.OrdinalIgnoreCase) ||
+                s.Tags.Contains(term, StringComparison.OrdinalIgnoreCase) ||
+                EmojiMatches(s.Emoji, term));
         }
 
         if (_selectedTags.Count > 0)
@@ -204,8 +221,30 @@
         _filtered = [.. query];
     }
 
+    private static bool EmojiMatches(string stored, string term) =>
+        SoundEmoji.TryParse(stored, out var emoji) &&
+        emoji.SearchText.Contains(term, StringComparison.OrdinalIgnoreCase);
+
     private void UpdateCanPlay() =>
         _canPlay = Playback.IsConnected;
+
+    private async Task Edit(Sound sound)
+    {
+        var parameters = new DialogParameters<SoundEditDialog> { { x => x.Sound, sound } };
+        var dialog = await Dialogs.ShowAsync<SoundEditDialog>("Edit sound", parameters);
+        var result = await dialog.Result;
+
+        if (result?.Canceled != false || result.Data is not SoundEditDialog.SoundEdit edit)
+        {
+            return;
+        }
+
+        if (await Library.UpdateAsync(sound.Id, edit.Name, edit.Tags, edit.Emoji))
+        {
+            Snackbar.Add($"Updated {edit.Name}", Severity.Success);
+            Events.RaiseLibraryChanged();
+        }
+    }
 
     private async Task Play(Sound sound)
     {
