@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#241B1D"/>
+      <stop offset="1" stop-color="#120D0C"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.46" r="0.5">
+      <stop offset="0" stop-color="#E11C33" stop-opacity="0.42"/>
+      <stop offset="1" stop-color="#E11C33" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="red" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#F0425A"/>
+      <stop offset="1" stop-color="#C10E22"/>
+    </linearGradient>
+    <linearGradient id="cream" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FBF6EA"/>
+      <stop offset="1" stop-color="#E4D5B8"/>
+    </linearGradient>
+  </defs>
+
+  <!-- rounded-square field -->
+  <rect x="0" y="0" width="1024" height="1024" rx="232" fill="url(#bg)"/>
+  <rect x="0" y="0" width="1024" height="1024" rx="232" fill="url(#glow)"/>
+  <rect x="12" y="12" width="1000" height="1000" rx="222" fill="none" stroke="#F0425A" stroke-opacity="0.14" stroke-width="4"/>
+
+  <!-- equalizer bars: red / cream / red / cream / red  (red-white-red rhythm) -->
+  <g>
+    <rect x="184" y="440" width="96" height="300" rx="48" fill="url(#red)"/>
+    <rect x="324" y="270" width="96" height="470" rx="48" fill="url(#cream)"/>
+    <rect x="464" y="140" width="96" height="600" rx="48" fill="url(#red)"/>
+    <rect x="604" y="310" width="96" height="430" rx="48" fill="url(#cream)"/>
+    <rect x="744" y="400" width="96" height="340" rx="48" fill="url(#red)"/>
+  </g>
+
+  <!-- board baseline -->
+  <rect x="176" y="782" width="672" height="20" rx="10" fill="url(#cream)" fill-opacity="0.85"/>
+</svg>

@@ -10,7 +10,11 @@
     <link rel="stylesheet" href="@Assets["app.css"]" />
     <link rel="stylesheet" href="@Assets["SemperSounds.Web.styles.css"]" />
     <ImportMap />
-    <link rel="icon" type="image/png" href="favicon.png" />
+    @* SVG first so the tab icon stays sharp on high-DPI displays; the PNG is only
+       fetched by browsers that will not take an SVG icon. *@
+    <link rel="icon" type="image/svg+xml" href="@Assets["logo.svg"]" />
+    <link rel="alternate icon" type="image/png" href="@Assets["favicon.png"]" />
+    <link rel="apple-touch-icon" href="@Assets["favicon.png"]" />
     <HeadOutlet @rendermode="InteractiveServer" />
 </head>
 
