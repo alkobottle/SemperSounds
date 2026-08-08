@@ -36,6 +36,18 @@ them. Unit tests stub the `IAudioProbe`/`IAudioTranscoder` boundary, so they pas
 
 NetCord is prerelease — adding or updating it needs `dotnet add package NetCord --prerelease`.
 
+### Native voice libraries
+
+Voice needs libdave, libsodium and opus, and every one of them fails at *runtime* rather
+than at build. libdave is Discord's E2EE voice protocol; it is internal to NetCord's
+`VoiceClient` with no way to disable it, and it exists in no Linux distro repo. libdave and
+libsodium therefore arrive as NuGet native assets (`runtimes/<rid>/native/`), opus from
+`OpusDotNet.opus.win-x64` on Windows and `libopus-dev` in the container.
+
+Use `libopus-dev`, never `libopus0`: the latter installs only `libopus.so.0`, while .NET
+probes for the unversioned `libopus.so`. To check an image, `ldd` each native and confirm
+nothing reports "not found".
+
 ### Verifying third-party API shape
 
 NetCord and MudBlazor docs lag their packages, and both have already been wrong here

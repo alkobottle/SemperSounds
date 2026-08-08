@@ -21,6 +21,7 @@ clips into it. Sounds overlap the way the real soundboard does, and everything i
 | Overlapping sounds | They mix, like the real soundboard. **Stop all** silences everything |
 | Upload limit | 5 seconds (0.25s tolerance for encoder padding), 10 MB |
 | Loudness | Normalized at upload, so no clip is ten times louder than the rest |
+| Emoji | Every sound carries one — your server's custom emoji or any standard one — and search matches it, including a custom emoji's name |
 
 Uploads are converted once at upload into raw 48 kHz stereo PCM plus a normalized mp3
 preview. Playback then never spawns a process — it reads ~1 MB off disk and mixes it.
