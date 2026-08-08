@@ -78,7 +78,9 @@
                             </div>
 
                             <MudText Typo="Typo.caption" Class="mud-text-secondary mb-2">
-                                @(sound.DurationMs / 1000.0).ToString("0.0")s · @sound.UploaderName
+                                @* The whole expression must sit inside @(...): a trailing .ToString()
+                                   after the closing paren is emitted as literal text. *@
+                                @((sound.DurationMs / 1000.0).ToString("0.0"))s · @sound.UploaderName
                             </MudText>
 
                             <MudSpacer />
