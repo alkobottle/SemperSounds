@@ -3,7 +3,7 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
-# Restore first, on project files alone, so the layer caches across source edits.
+# Warm the NuGet cache on project files alone, so this layer survives source edits.
 COPY SemperSounds.slnx ./
 COPY src/SemperSounds.Core/SemperSounds.Core.csproj src/SemperSounds.Core/
 COPY src/SemperSounds.Web/SemperSounds.Web.csproj src/SemperSounds.Web/
@@ -11,8 +11,15 @@ COPY tests/SemperSounds.Tests/SemperSounds.Tests.csproj tests/SemperSounds.Tests
 RUN dotnet restore src/SemperSounds.Web/SemperSounds.Web.csproj
 
 COPY . .
+
+# Deliberately NOT --no-restore. With only the .csproj present, the SDK cannot see any
+# Razor components or wwwroot, so it never adds the implicit
+# Microsoft.AspNetCore.App.Internal.Assets package that carries blazor.web.js. Skipping
+# restore here would lock in that incomplete graph and publish an app whose framework
+# script 404s -- the page renders but nothing is interactive. The restore above still
+# earns its place by populating the NuGet cache.
 RUN dotnet publish src/SemperSounds.Web/SemperSounds.Web.csproj \
-    -c Release -o /app --no-restore
+    -c Release -o /app
 
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime

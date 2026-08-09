@@ -48,6 +48,22 @@ Use `libopus-dev`, never `libopus0`: the latter installs only `libopus.so.0`, wh
 probes for the unversioned `libopus.so`. To check an image, `ldd` each native and confirm
 nothing reports "not found".
 
+### Never add --no-restore to the Dockerfile's publish
+
+The Dockerfile restores on `.csproj` files alone to keep that layer cacheable. At that
+point the SDK cannot see any Razor component or `wwwroot`, so it does **not** add the
+implicit `Microsoft.AspNetCore.App.Internal.Assets` package — the one carrying
+`blazor.web.js`. Publishing with `--no-restore` locks in that incomplete graph, and the
+result is an app that looks fine but serves a 404 for `/_framework/blazor.web.js`, leaving
+every page rendered but completely non-interactive.
+
+This reproduces on a stock Blazor template, so it is not specific to this project. Verify
+any Dockerfile change with:
+
+```bash
+docker run --rm --entrypoint /bin/sh sempersounds:latest -c "ls wwwroot/_framework/"
+```
+
 ### Verifying third-party API shape
 
 NetCord and MudBlazor docs lag their packages, and both have already been wrong here
