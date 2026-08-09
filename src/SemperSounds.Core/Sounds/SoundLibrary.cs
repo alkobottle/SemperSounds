@@ -178,12 +178,29 @@ public sealed class SoundLibrary(
             .Take(count)
             .ToListAsync(cancellationToken);
 
+    /// <summary>
+    /// Every tag in use with how many sounds carry it, most-used first.
+    /// Ordering by popularity is what nudges people onto the established tag instead of
+    /// coining a near-duplicate; ties fall back to alphabetical so the list is stable.
+    /// </summary>
+    public async Task<IReadOnlyList<TagUsage>> GetTagUsageAsync(CancellationToken cancellationToken = default)
+    {
+        // Tags live in a CSV column, so counting happens in memory. The library is
+        // hundreds of rows, not millions.
+        var allTags = await db.Sounds.AsNoTracking()
+            .Select(s => s.Tags)
+            .ToListAsync(cancellationToken);
+
+        return [.. allTags
+            .SelectMany(TagList.Parse)
+            .GroupBy(tag => tag, StringComparer.Ordinal)
+            .Select(group => new TagUsage(group.Key, group.Count()))
+            .OrderByDescending(usage => usage.Count)
+            .ThenBy(usage => usage.Tag, StringComparer.Ordinal)];
+    }
+
     /// <summary>Lowercased, trimmed, de-duplicated, stored as CSV.</summary>
-    private static string NormalizeTags(string tags) =>
-        string.Join(',', tags
-            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Select(t => t.ToLowerInvariant())
-            .Distinct());
+    private static string NormalizeTags(string tags) => TagList.ToCsv(TagList.Parse(tags));
 
     private void DeleteQuietly(params string[] paths)
     {

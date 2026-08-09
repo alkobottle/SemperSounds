@@ -1,0 +1,166 @@
+@using SemperSounds.Core.Sounds
+@inject SoundLibrary Library
+
+@* Tags as removable chips plus an autocomplete over the tags already in use.
+   Surfacing existing tags while typing is the point: it is what stops "valorant",
+   "valo" and "Valorant" becoming three separate tags. *@
+
+<div>
+    @if (_tags.Count > 0)
+    {
+        <div class="d-flex flex-wrap gap-1 mb-2">
+            @foreach (var tag in _tags)
+            {
+                <MudChip T="string"
+                         Value="@tag"
+                         Size="Size.Small"
+                         Color="Color.Primary"
+                         OnClose="@(() => Remove(tag))">
+                    @tag
+                </MudChip>
+            }
+        </div>
+    }
+
+    <MudAutocomplete T="string"
+                     @ref="_autocomplete"
+                     Value="@_pending"
+                     ValueChanged="Add"
+                     SearchFunc="Search"
+                     Label="@Label"
+                     Placeholder="Type to search existing tags"
+                     Variant="Variant.Outlined"
+                     Margin="Margin.Dense"
+                     CoerceValue="true"
+                     ResetValueOnEmptyText="true"
+                     Clearable="false"
+                     MaxItems="10"
+                     HelperText="Pick an existing tag, or type a new one and press Enter">
+        <ItemTemplate Context="tag">
+            <div class="d-flex justify-space-between align-center" style="gap: 12px;">
+                <span>@tag</span>
+                @if (_usageByTag.TryGetValue(tag, out var count))
+                {
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">used @count×</MudText>
+                }
+                else
+                {
+                    <MudText Typo="Typo.caption" Color="Color.Success">new</MudText>
+                }
+            </div>
+        </ItemTemplate>
+    </MudAutocomplete>
+
+    @if (_unusedSuggestions.Count > 0)
+    {
+        <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">Existing tags</MudText>
+        <div class="d-flex flex-wrap gap-1 mt-1">
+            @foreach (var usage in _unusedSuggestions)
+            {
+                <MudChip T="string"
+                         Value="@usage.Tag"
+                         Size="Size.Small"
+                         Variant="Variant.Outlined"
+                         OnClick="@(() => Add(usage.Tag))">
+                    @usage.Tag <span class="mud-text-secondary ml-1">@usage.Count</span>
+                </MudChip>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    /// <summary>Comma-separated tags, matching how a sound stores them.</summary>
+    [Parameter, EditorRequired] public string Value { get; set; } = string.Empty;
+    [Parameter] public EventCallback<string> ValueChanged { get; set; }
+    [Parameter] public string Label { get; set; } = "Tags";
+
+    /// <summary>How many existing tags to offer as click-to-add chips.</summary>
+    [Parameter] public int MaxSuggestionChips { get; set; } = 20;
+
+    private List<string> _tags = [];
+    private IReadOnlyList<TagUsage> _usage = [];
+    private Dictionary<string, int> _usageByTag = [];
+    private string? _pending;
+    private MudAutocomplete<string>? _autocomplete;
+
+    private List<TagUsage> _unusedSuggestions = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _usage = await Library.GetTagUsageAsync();
+        _usageByTag = _usage.ToDictionary(u => u.Tag, u => u.Count, StringComparer.Ordinal);
+        RefreshSuggestions();
+    }
+
+    protected override void OnParametersSet()
+    {
+        var incoming = TagList.Parse(Value).ToList();
+
+        // Only adopt the parameter when it genuinely differs, so re-rendering does not
+        // discard chips the user just added.
+        if (!incoming.SequenceEqual(_tags, StringComparer.Ordinal))
+        {
+            _tags = incoming;
+            RefreshSuggestions();
+        }
+    }
+
+    private Task<IEnumerable<string>> Search(string? value, CancellationToken cancellationToken)
+    {
+        var matches = _usage
+            .Select(u => u.Tag)
+            .Where(tag => !_tags.Contains(tag, StringComparer.Ordinal));
+
+        if (!string.IsNullOrWhiteSpace(value))
+        {
+            var term = value.Trim();
+            matches = matches.Where(tag => tag.Contains(term, StringComparison.OrdinalIgnoreCase));
+
+            // Offer the typed text itself so a genuinely new tag can still be created,
+            // but only once it is not already an exact existing match.
+            var typed = TagList.Parse(term).FirstOrDefault();
+            if (typed is not null && !_usageByTag.ContainsKey(typed) && !_tags.Contains(typed, StringComparer.Ordinal))
+            {
+                matches = matches.Append(typed);
+            }
+        }
+
+        return Task.FromResult(matches);
+    }
+
+    private async Task Add(string? tag)
+    {
+        _pending = null;
+
+        foreach (var parsed in TagList.Parse(tag))
+        {
+            if (!_tags.Contains(parsed, StringComparer.Ordinal))
+            {
+                _tags.Add(parsed);
+            }
+        }
+
+        RefreshSuggestions();
+        await Commit();
+
+        if (_autocomplete is not null)
+        {
+            await _autocomplete.ClearAsync();
+        }
+    }
+
+    private async Task Remove(string tag)
+    {
+        _tags.Remove(tag);
+        RefreshSuggestions();
+        await Commit();
+    }
+
+    private void RefreshSuggestions() =>
+        _unusedSuggestions = [.. _usage
+            .Where(u => !_tags.Contains(u.Tag, StringComparer.Ordinal))
+            .Take(MaxSuggestionChips)];
+
+    private Task Commit() => ValueChanged.InvokeAsync(TagList.ToCsv(_tags));
+}

@@ -174,6 +174,33 @@ public sealed class SoundLibraryTests : IDisposable
     }
 
     [Fact]
+    public async Task TagUsage_CountsAcrossSoundsAndOrdersByPopularity()
+    {
+        // Ordering by usage is the anti-drift mechanism: the established tag surfaces
+        // above an obscure near-duplicate while you are still typing.
+        var library = CreateLibrary(new AudioProbeResult(true, TimeSpan.FromSeconds(1)));
+        await library.AddAsync(Upload(), "a.mp3", "A", "meme, valorant", 42, "alkobot");
+        await library.AddAsync(Upload(), "b.mp3", "B", "meme, airplane", 42, "alkobot");
+        await library.AddAsync(Upload(), "c.mp3", "C", "meme", 42, "alkobot");
+
+        var usage = await library.GetTagUsageAsync();
+
+        Assert.Equal("meme", usage[0].Tag);
+        Assert.Equal(3, usage[0].Count);
+        // The two single-use tags tie on count, so they fall back to alphabetical order.
+        Assert.Equal(["airplane", "valorant"], usage.Skip(1).Select(u => u.Tag));
+    }
+
+    [Fact]
+    public async Task TagUsage_IsEmptyWhenNothingIsTagged()
+    {
+        var library = CreateLibrary(new AudioProbeResult(true, TimeSpan.FromSeconds(1)));
+        await library.AddAsync(Upload(), "a.mp3", "A", "", 42, "alkobot");
+
+        Assert.Empty(await library.GetTagUsageAsync());
+    }
+
+    [Fact]
     public async Task Delete_RemovesRowAndFiles()
     {
         var library = CreateLibrary(new AudioProbeResult(true, TimeSpan.FromSeconds(1)));

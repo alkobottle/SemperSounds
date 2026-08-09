@@ -14,11 +14,7 @@
                               Immediate="true" />
             </div>
 
-            <MudTextField @bind-Value="_tags"
-                          Label="Tags"
-                          Variant="Variant.Outlined"
-                          Margin="Margin.Dense"
-                          HelperText="Comma separated" />
+            <TagEditor Value="@_tags" ValueChanged="@(value => _tags = value)" />
         </MudStack>
     </DialogContent>
     <DialogActions>

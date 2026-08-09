@@ -36,10 +36,7 @@
                           Class="flex-grow-1" />
         </div>
 
-        <MudTextField @bind-Value="_tags"
-                      Label="Tags"
-                      Variant="Variant.Outlined"
-                      HelperText="Comma separated, e.g. meme, valorant, loud" />
+        <TagEditor Value="@_tags" ValueChanged="@(value => _tags = value)" />
 
         @if (_uploading)
         {
