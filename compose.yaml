@@ -1,6 +1,11 @@
 services:
   sempersounds:
-    build: .
+    build:
+      context: .
+      args:
+        # Set by the deploy script; "unknown" if built by hand without it.
+        GIT_COMMIT: ${GIT_COMMIT:-unknown}
+        BUILT_AT: ${BUILT_AT:-unknown}
     image: sempersounds:latest
     container_name: sempersounds
     restart: unless-stopped

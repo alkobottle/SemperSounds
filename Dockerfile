@@ -51,6 +51,14 @@ RUN apt-get update \
 WORKDIR /app
 COPY --from=build /app .
 
+# Which commit this image was built from. .dockerignore excludes .git, so the build cannot
+# derive this itself — compose passes it in. Defaults make an un-tagged build obvious
+# rather than silently claiming to be something it is not.
+ARG GIT_COMMIT=unknown
+ARG BUILT_AT=unknown
+ENV App__Version=$GIT_COMMIT \
+    App__BuiltAt=$BUILT_AT
+
 # Sounds and the SQLite database live here. Mount a volume or uploads die with
 # the container.
 RUN mkdir -p /data && chown -R app:app /data

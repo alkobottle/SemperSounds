@@ -57,8 +57,27 @@ At <https://discord.com/developers/applications>:
 
 ```bash
 cp .env.example .env      # fill in the four Discord values and your public URL
-docker compose up -d --build
+./deploy.sh               # pulls, rebuilds, and reports what went live
 ```
+
+`deploy.sh` stamps the image with the commit it was built from. Building by hand skips
+that, and the version then reads `unknown`:
+
+```bash
+GIT_COMMIT=$(git rev-parse --short HEAD) docker compose up -d --build
+```
+
+### Which version is live
+
+The running commit appears at the foot of every page, and unauthenticated at `/healthz`:
+
+```bash
+curl -s https://your-domain/healthz
+# {"status":"ok","version":"eb254a6","builtAt":"2026-08-09T18:33:21Z"}
+```
+
+`builtAt` distinguishes rebuilds of the same commit; `dev` means it was not built through
+Docker at all.
 
 The container listens on `127.0.0.1:8080` and expects a reverse proxy in front of it to
 terminate TLS. Point your proxy at it and make sure it sets `X-Forwarded-Proto`.

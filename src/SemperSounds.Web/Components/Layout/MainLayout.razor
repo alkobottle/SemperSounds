@@ -1,4 +1,5 @@
 @inherits LayoutComponentBase
+@inject Microsoft.Extensions.Options.IOptions<SemperSounds.Core.Configuration.AppOptions> AppSettings
 
 @* MudBlazor's providers must render interactively or dialogs, snackbars and popovers
    silently do nothing. App.razor puts InteractiveServer on Routes globally, which covers this. *@
@@ -57,6 +58,24 @@
     <MudMainContent>
         <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-6">
             @Body
+
+            @* Which build is live. Small and muted, but present on every page so it can be
+               read off a screenshot without digging. *@
+            @* Centred by inline style, not a class: MudBlazor ships no text-center, and
+               Bootstrap is gone, so the class form silently does nothing. *@
+            <MudText Typo="Typo.caption"
+                     Class="mud-text-secondary d-block mt-8 mb-4"
+                     Style="text-align: center;"
+                     title="@BuildTooltip">
+                SemperSounds @AppSettings.Value.DisplayVersion
+            </MudText>
         </MudContainer>
     </MudMainContent>
 </MudLayout>
+
+@code {
+    private string BuildTooltip =>
+        string.IsNullOrWhiteSpace(AppSettings.Value.BuiltAt) || AppSettings.Value.BuiltAt == "unknown"
+            ? "Not built through Docker"
+            : $"Built {AppSettings.Value.BuiltAt}";
+}

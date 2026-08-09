@@ -16,4 +16,16 @@ public sealed class AppOptions
     public string PublicBaseUrl { get; set; } = string.Empty;
 
     public bool HasPublicBaseUrl => !string.IsNullOrWhiteSpace(PublicBaseUrl);
+
+    /// <summary>
+    /// Short git commit the image was built from, supplied as a Docker build argument.
+    /// The container has no .git directory, so it cannot work this out for itself.
+    /// </summary>
+    public string Version { get; set; } = string.Empty;
+
+    /// <summary>When the image was built, distinguishing rebuilds of the same commit.</summary>
+    public string BuiltAt { get; set; } = string.Empty;
+
+    /// <summary>What to show in the UI. "dev" means it was not built through Docker.</summary>
+    public string DisplayVersion => string.IsNullOrWhiteSpace(Version) ? "dev" : Version;
 }

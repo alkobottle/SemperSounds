@@ -126,7 +126,14 @@ app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
-app.MapGet("/healthz", () => Results.Ok(new { status = "ok" }));
+// Public and unauthenticated on purpose: it doubles as the way to check which commit is
+// actually live, without needing to sign in.
+app.MapGet("/healthz", (IOptions<AppOptions> app) => Results.Ok(new
+{
+    status = "ok",
+    version = app.Value.DisplayVersion,
+    builtAt = app.Value.BuiltAt,
+}));
 
 app.MapGet("/login", (string? returnUrl) =>
     Results.Challenge(
