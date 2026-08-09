@@ -1,0 +1,67 @@
+@page "/"
+@inject NavigationManager Navigation
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+@* Public on purpose: this is what a link crawler fetches, and what someone who has never
+   signed in lands on. Anything requiring auth lives at /board. *@
+
+<PageTitle>SemperSounds — a Discord soundboard without the limit</PageTitle>
+
+<div class="d-flex flex-column align-center justify-center" style="min-height: 70vh; text-align: center;">
+    <img src="logo.svg" alt="" width="128" height="128" class="mb-6" />
+
+    <MudText Typo="Typo.h3" GutterBottom="true">SemperSounds</MudText>
+
+    <MudText Typo="Typo.h6" Class="mud-text-secondary mb-8" Style="max-width: 30rem;">
+        A soundboard for your Discord server, without the handful-of-slots limit.
+    </MudText>
+
+    <MudGrid Justify="Justify.Center" Style="max-width: 52rem;" Class="mb-8">
+        <MudItem xs="12" sm="4">
+            <MudIcon Icon="@Icons.Material.Filled.AllInclusive" Color="Color.Primary" Size="Size.Large" />
+            <MudText Typo="Typo.subtitle1">As many as you like</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                Upload clips up to five seconds. Trim longer files down in the browser.
+            </MudText>
+        </MudItem>
+        <MudItem xs="12" sm="4">
+            <MudIcon Icon="@Icons.Material.Filled.GraphicEq" Color="Color.Primary" Size="Size.Large" />
+            <MudText Typo="Typo.subtitle1">Plays over each other</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                Sounds mix rather than cutting each other off. One button silences everything.
+            </MudText>
+        </MudItem>
+        <MudItem xs="12" sm="4">
+            <MudIcon Icon="@Icons.Material.Filled.Bolt" Color="Color.Primary" Size="Size.Large" />
+            <MudText Typo="Typo.subtitle1">Keys 1–9</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                Star your favourites and fire them from the keyboard.
+            </MudText>
+        </MudItem>
+    </MudGrid>
+
+    <MudButton Href="/login"
+               Variant="Variant.Filled"
+               Color="Color.Primary"
+               Size="Size.Large"
+               StartIcon="@Icons.Material.Filled.Login">
+        Sign in with Discord
+    </MudButton>
+
+    <MudText Typo="Typo.caption" Class="mud-text-secondary mt-4">
+        You need to be a member of the server this instance belongs to.
+    </MudText>
+</div>
+
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        // Someone already signed in wants the board, not the pitch.
+        var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+
+        if (state.User.Identity?.IsAuthenticated == true)
+        {
+            Navigation.NavigateTo("/board", replace: true);
+        }
+    }
+}

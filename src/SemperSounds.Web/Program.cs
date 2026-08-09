@@ -1,6 +1,7 @@
 using AspNet.Security.OAuth.Discord;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -42,6 +43,13 @@ Directory.CreateDirectory(soundboardOptions.SoundsPath);
 
 builder.Services.AddDbContext<SoundboardDbContext>(options =>
     options.UseSqlite($"Data Source={soundboardOptions.DatabasePath}"));
+
+// Keep the Data Protection keys on the mounted volume. They default to a directory inside
+// the container, which is discarded on every rebuild — that invalidates every auth cookie,
+// so each deployment silently signs everyone out.
+builder.Services.AddDataProtection()
+    .PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(soundboardOptions.DataPath, "keys")))
+    .SetApplicationName("SemperSounds");
 
 // Audio pipeline. The ffmpeg wrappers sit behind interfaces so upload validation
 // stays testable without spawning processes.
@@ -122,7 +130,7 @@ app.MapGet("/healthz", () => Results.Ok(new { status = "ok" }));
 
 app.MapGet("/login", (string? returnUrl) =>
     Results.Challenge(
-        new AuthenticationProperties { RedirectUri = returnUrl ?? "/" },
+        new AuthenticationProperties { RedirectUri = returnUrl ?? "/board" },
         [DiscordAuthenticationDefaults.AuthenticationScheme]));
 
 app.MapPost("/logout", () =>

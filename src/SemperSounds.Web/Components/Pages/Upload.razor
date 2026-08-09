@@ -151,7 +151,7 @@
 
             Events.RaiseLibraryChanged();
             Snackbar.Add($"Added {result.Sound!.Name}", Severity.Success);
-            Navigation.NavigateTo("/");
+            Navigation.NavigateTo("/board");
         }
         catch (IOException ex)
         {

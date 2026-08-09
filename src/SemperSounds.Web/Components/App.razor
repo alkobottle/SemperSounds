@@ -1,3 +1,5 @@
+@inject NavigationManager Navigation
+
 <!DOCTYPE html>
 <html lang="en">
 
@@ -15,6 +17,21 @@
     <link rel="icon" type="image/svg+xml" href="@Assets["logo.svg"]" />
     <link rel="alternate icon" type="image/png" href="@Assets["favicon.png"]" />
     <link rel="apple-touch-icon" href="@Assets["favicon.png"]" />
+
+    @* Link preview card. Static rather than per-page head content because the crawlers that
+       read it run no JavaScript, and the image must be a raster at an absolute URL — Discord
+       will not render the SVG logo. Without these, Discord followed the sign-in redirect and
+       showed its own marketing card instead. *@
+    <meta property="og:site_name" content="SemperSounds" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="SemperSounds" />
+    <meta property="og:description" content="A soundboard for your Discord server, without the handful-of-slots limit. Overlapping playback, in-browser trimming, and favourites on keys 1-9." />
+    <meta property="og:url" content="@BaseUrl" />
+    <meta property="og:image" content="@($"{BaseUrl}favicon.png")" />
+    <meta property="og:image:width" content="512" />
+    <meta property="og:image:height" content="512" />
+    <meta name="theme-color" content="#E11C33" />
+    <meta name="description" content="A soundboard for your Discord server, without the handful-of-slots limit." />
     <HeadOutlet @rendermode="InteractiveServer" />
 </head>
 
@@ -28,3 +45,12 @@
 </body>
 
 </html>
+
+@code {
+    /// <summary>
+    /// Absolute base URL, with a trailing slash. Correct behind the reverse proxy because
+    /// Program.cs rewrites the request scheme and host from App__PublicBaseUrl before this
+    /// renders — otherwise the card would advertise the container's internal address.
+    /// </summary>
+    private string BaseUrl => Navigation.BaseUri;
+}
