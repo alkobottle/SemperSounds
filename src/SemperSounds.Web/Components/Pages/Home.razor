@@ -135,10 +135,14 @@
                                     <MudText Typo="Typo.subtitle2" Class="text-truncate" title="@sound.Name">
                                         @sound.Name
                                     </MudText>
-                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary d-flex align-center" Style="gap: 5px;">
                                         @* The whole expression must sit inside @(...): a trailing .ToString()
                                            after the closing paren is emitted as literal text. *@
-                                        @((sound.DurationMs / 1000.0).ToString("0.0"))s · @sound.UploaderName
+                                        <span>@((sound.DurationMs / 1000.0).ToString("0.0"))s</span>
+                                        <span>·</span>
+                                        <UserAvatar UserId="@sound.UploaderId"
+                                                    FallbackName="@sound.UploaderName"
+                                                    Pixels="16" />
                                     </MudText>
                                 </div>
 
@@ -199,8 +203,11 @@
                 <MudList T="string" Dense="true">
                     @foreach (var play in _recent)
                     {
-                        <MudListItem T="string" Icon="@Icons.Material.Filled.MusicNote">
-                            <MudText Typo="Typo.body2"><b>@play.UserName</b> played @play.SoundName</MudText>
+                        <MudListItem T="string">
+                            <MudText Typo="Typo.body2" Class="d-flex align-center" Style="gap: 6px;">
+                                <UserAvatar UserId="@play.UserId" FallbackName="@play.UserName" Pixels="18" />
+                                <span>played @play.SoundName</span>
+                            </MudText>
                             <MudText Typo="Typo.caption" Class="mud-text-secondary">@play.PlayedAt.ToLocalTime().ToString("HH:mm:ss")</MudText>
                         </MudListItem>
                     }

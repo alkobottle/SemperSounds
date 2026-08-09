@@ -18,6 +18,7 @@ public readonly record struct VoiceMember(ulong UserId, string DisplayName, stri
 /// </remarks>
 public sealed class VoiceStateTracker(
     DiscordBotService bot,
+    GuildUserDirectory users,
     IOptions<DiscordOptions> options)
 {
     private readonly ulong _guildId = options.Value.GuildId;
@@ -42,7 +43,8 @@ public sealed class VoiceStateTracker(
 
         return [.. guild.VoiceStates.Values
             .Where(state => state.ChannelId == channelId)
-            .Select(state => ToMember(guild, state))
+            .Select(state => users.Resolve(state.UserId))
+            .Select(user => new VoiceMember(user.UserId, user.DisplayName, user.AvatarUrl))
             .OrderBy(member => member.DisplayName, StringComparer.OrdinalIgnoreCase)];
     }
 
@@ -65,15 +67,4 @@ public sealed class VoiceStateTracker(
             ? channel.Name ?? "voice"
             : "voice";
 
-    private static VoiceMember ToMember(Guild guild, VoiceState state)
-    {
-        var user = guild.Users.TryGetValue(state.UserId, out var guildUser) ? guildUser : null;
-
-        var name = user?.Nickname
-            ?? user?.GlobalName
-            ?? user?.Username
-            ?? state.UserId.ToString();
-
-        return new VoiceMember(state.UserId, name, user?.GetAvatarUrl()?.ToString());
-    }
 }

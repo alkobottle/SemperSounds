@@ -16,7 +16,9 @@
     </HeaderContent>
     <RowTemplate>
         <MudTd DataLabel="When">@context.PlayedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</MudTd>
-        <MudTd DataLabel="Who">@context.UserName</MudTd>
+        <MudTd DataLabel="Who">
+            <UserAvatar UserId="@context.UserId" FallbackName="@context.UserName" Pixels="20" />
+        </MudTd>
         <MudTd DataLabel="Sound">@context.SoundName</MudTd>
     </RowTemplate>
     <NoRecordsContent>

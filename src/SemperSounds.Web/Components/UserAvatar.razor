@@ -1,0 +1,42 @@
+@inject GuildUserDirectory Users
+
+@* Resolved from the gateway cache each render, so a changed Discord avatar shows up here
+   without any stored copy going stale. *@
+
+@{
+    var user = Users.Resolve(UserId, FallbackName);
+    var box = $"width:{Pixels}px;height:{Pixels}px;min-width:{Pixels}px;";
+}
+
+<span class="d-inline-flex align-center" style="gap: 5px; min-width: 0;" title="@user.DisplayName">
+    @if (user.AvatarUrl is { } url)
+    {
+        <img src="@url"
+             alt=""
+             style="@box border-radius: 50%; object-fit: cover;"
+             loading="lazy" />
+    }
+    else
+    {
+        <span style="@box border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--mud-palette-surface); font-size: @(Pixels * 0.6)px; line-height: 1;">
+            @user.Initial
+        </span>
+    }
+
+    @if (ShowName)
+    {
+        <span class="text-truncate">@user.DisplayName</span>
+    }
+</span>
+
+@code {
+    [Parameter, EditorRequired] public ulong UserId { get; set; }
+
+    /// <summary>Name recorded at the time, used if the user has since left the server.</summary>
+    [Parameter] public string? FallbackName { get; set; }
+
+    /// <summary>Rendered diameter. Explicit pixels because this sits inline with caption text.</summary>
+    [Parameter] public int Pixels { get; set; } = 16;
+
+    [Parameter] public bool ShowName { get; set; } = true;
+}
