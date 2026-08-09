@@ -32,3 +32,6 @@ Thumbs.db
 
 ## Sounds exported from Discord's soundboard for migration. Data, not code.
 /migration/
+
+## Design notes from the brainstorming workflow. Working material, kept locally.
+/docs/superpowers/specs/
