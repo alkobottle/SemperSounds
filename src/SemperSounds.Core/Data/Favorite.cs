@@ -13,9 +13,9 @@ public sealed class Favorite
     public required Guid SoundId { get; set; }
 
     /// <summary>
-    /// Navigation to the sound. Unlike <see cref="PlayLogEntry"/> this is a real foreign
-    /// key with cascade delete: a play that happened is history and must outlive the
-    /// sound, but a favourite pointing at a deleted sound is only a dangling pointer.
+    /// Navigation to the sound. Unlike <see cref="ActivityLogEntry"/> this is a real
+    /// foreign key with cascade delete: a play that happened is history and must outlive
+    /// the sound, but a favourite pointing at a deleted sound is only a dangling pointer.
     /// </summary>
     public Sound? Sound { get; set; }
 

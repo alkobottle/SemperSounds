@@ -81,6 +81,24 @@ public class IdleTimerTests
     }
 
     [Fact]
+    public void UnknownOccupancy_IsTreatedAsStillOccupied()
+    {
+        // The caller passes "anyoneListening: true" when the guild cache is momentarily
+        // unavailable. That window is short, but with a 5 second timeout it is long enough
+        // to eject the bot from a channel people are still sitting in.
+        var (timer, time) = Create();
+
+        timer.ShouldLeave(anyoneListening: false);
+        time.Advance(TimeSpan.FromSeconds(4));
+
+        // Cache goes away: treated as occupied, so the countdown restarts.
+        Assert.False(timer.ShouldLeave(anyoneListening: true));
+
+        time.Advance(TimeSpan.FromSeconds(4));
+        Assert.False(timer.ShouldLeave(anyoneListening: false));
+    }
+
+    [Fact]
     public void ZeroTimeout_DisablesAutomaticLeaving()
     {
         var timer = new IdleTimer(TimeSpan.Zero, new FakeTimeProvider());

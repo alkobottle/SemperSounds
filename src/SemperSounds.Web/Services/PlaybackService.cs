@@ -87,7 +87,18 @@ public sealed class PlaybackService(
                 return PlaybackResult.Ok;
             }
 
+            // Moving between channels is a departure followed by an arrival. Without this
+            // the log shows the bot summoned to two channels and never leaving the first.
+            var previousChannelId = ConnectedChannelId;
+            var previousChannelName = ConnectedChannelName;
+
             await DisconnectCoreAsync();
+
+            if (previousChannelId is { } leftId)
+            {
+                await LogActivityAsync(
+                    log => log.LogLeaveAsync(userId, userName, leftId, previousChannelName));
+            }
 
             var voiceClient = await bot.Client.JoinVoiceChannelAsync(
                 _discord.GuildId, channelId, cancellationToken: cancellationToken);
@@ -138,13 +149,18 @@ public sealed class PlaybackService(
     /// <param name="userId">Null when the bot is leaving on its own because nobody remained.</param>
     public async Task LeaveAsync(ulong? userId = null, string? userName = null)
     {
-        // Captured before disconnecting, which clears them.
-        var channelId = ConnectedChannelId;
-        var channelName = ConnectedChannelName;
+        ulong? channelId;
+        string channelName;
 
         await _connectionGate.WaitAsync();
         try
         {
+            // Read inside the gate. Captured outside it, a manual Leave racing the idle
+            // timer would see the same channel from both calls and log two departures for
+            // one disconnect.
+            channelId = ConnectedChannelId;
+            channelName = ConnectedChannelName;
+
             await DisconnectCoreAsync();
         }
         finally
@@ -152,11 +168,13 @@ public sealed class PlaybackService(
             _connectionGate.Release();
         }
 
-        if (channelId is { } id)
+        // Only the caller that actually found a connection reports it.
+        if (channelId is not { } id)
         {
-            await LogActivityAsync(log => log.LogLeaveAsync(userId, userName, id, channelName));
+            return;
         }
 
+        await LogActivityAsync(log => log.LogLeaveAsync(userId, userName, id, channelName));
         events.RaiseConnectionChanged();
     }
 
@@ -201,8 +219,11 @@ public sealed class PlaybackService(
         _mixer.Add(pcm, sound.Id);
         _lastPlayed[userId] = DateTimeOffset.UtcNow;
 
-        await scope.ServiceProvider.GetRequiredService<ActivityLog>()
-            .LogPlayAsync(sound, userId, userName, channelId, ConnectedChannelName, cancellationToken);
+        // Guarded like the other log writes: the clip is already mixing by this point, so a
+        // failed write must not surface as an exception out of the caller's click handler
+        // and must not stop the play being announced to other browsers.
+        var channelName = ConnectedChannelName;
+        await LogActivityAsync(log => log.LogPlayAsync(sound, userId, userName, channelId, channelName));
 
         events.RaiseSoundPlayed(new SoundPlayedNotification(
             sound.Id, sound.Name, userId, userName, DateTimeOffset.UtcNow));
@@ -353,9 +374,20 @@ public sealed class PlaybackService(
         }
     }
 
-    private bool ShouldLeaveIdleChannel() =>
-        ConnectedChannelId is { } channelId &&
-        _idleTimer.ShouldLeave(anyoneListening: voiceStates.CountHumansIn(channelId) > 0);
+    private bool ShouldLeaveIdleChannel()
+    {
+        if (ConnectedChannelId is not { } channelId)
+        {
+            return false;
+        }
+
+        // A null count means the guild cache is momentarily unavailable, not that the
+        // channel is empty. Treating it as "someone is listening" keeps the bot in place
+        // rather than dropping it out of an occupied channel while the cache repopulates.
+        var humans = voiceStates.CountHumansIn(channelId);
+
+        return _idleTimer.ShouldLeave(anyoneListening: humans is null or > 0);
+    }
 
     /// <summary>Tears down the connection. Callers must already hold <see cref="_connectionGate"/>.</summary>
     private async Task DisconnectCoreAsync()
@@ -425,6 +457,14 @@ public sealed class PlaybackService(
         await _connectionGate.WaitAsync();
         try
         {
+            // Record the departure before tearing down, so a container restart does not
+            // leave the log showing the bot still sitting in a channel.
+            if (ConnectedChannelId is { } channelId)
+            {
+                var channelName = ConnectedChannelName;
+                await LogActivityAsync(log => log.LogLeaveAsync(null, null, channelId, channelName));
+            }
+
             await DisconnectCoreAsync();
         }
         finally

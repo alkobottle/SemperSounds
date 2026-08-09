@@ -48,13 +48,21 @@ public sealed class VoiceStateTracker(
             .OrderBy(member => member.DisplayName, StringComparer.OrdinalIgnoreCase)];
     }
 
-    /// <summary>Human members only — used to decide when the bot should leave an empty channel.</summary>
-    public int CountHumansIn(ulong channelId)
+    /// <summary>
+    /// Human members only — used to decide when the bot should leave an empty channel.
+    /// </summary>
+    /// <returns>
+    /// Null when the guild is not in the cache, which is <em>not</em> the same as an empty
+    /// channel: the cache is briefly absent after a gateway session is invalidated and
+    /// before GUILD_CREATE repopulates it, and reporting 0 there would eject the bot from
+    /// a channel people are still sitting in.
+    /// </returns>
+    public int? CountHumansIn(ulong channelId)
     {
         var guild = Guild;
         if (guild is null)
         {
-            return 0;
+            return null;
         }
 
         return guild.VoiceStates.Values.Count(state =>
