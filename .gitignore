@@ -16,7 +16,12 @@ appsettings.Local.json
 
 ## Runtime data: uploaded sounds and the SQLite database live on a volume,
 ## not in the repository.
-data/
+## Anchored with a leading slash on purpose: a bare "data/" also matches
+## src/SemperSounds.Core/Data/ (git is case-insensitive on Windows), which silently
+## kept the whole EF layer — entities, DbContext and every migration — out of the repo.
+/data/
+## Development default from appsettings.Development.json ("./data" beside the Web project).
+/src/SemperSounds.Web/data/
 *.db
 *.db-shm
 *.db-wal
