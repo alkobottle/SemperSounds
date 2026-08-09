@@ -35,7 +35,53 @@ var dataPath = ArgValue("--data")
 var manifestPath = Path.Combine(folder, "manifest.json");
 if (!File.Exists(manifestPath))
 {
-    Console.Error.WriteLine($"No manifest.json in {folder}");
+    // "not found" has several quite different causes in a container, so say which.
+    Console.Error.WriteLine($"No manifest.json in {Path.GetFullPath(folder)}");
+
+    if (!Directory.Exists(folder))
+    {
+        Console.Error.WriteLine("""
+
+            That directory does not exist inside the container.
+            The files are not in the repository — copy them onto the mounted volume, so that
+            what is at ./data/import on the host appears as /data/import here.
+            """);
+        return 1;
+    }
+
+    string[] found;
+    try
+    {
+        found = Directory.GetFileSystemEntries(folder);
+    }
+    catch (UnauthorizedAccessException)
+    {
+        Console.Error.WriteLine($"""
+
+            The directory exists but this process cannot read it.
+            The container runs as uid {Environment.UserName}, so files copied as root may be
+            unreadable. On the host:  sudo chown -R 1654:1654 ./data/import
+            """);
+        return 1;
+    }
+
+    if (found.Length == 0)
+    {
+        Console.Error.WriteLine("\nThe directory is empty — the files have not been copied onto the volume yet.");
+        return 1;
+    }
+
+    Console.Error.WriteLine($"\nThe directory holds {found.Length} entries:");
+    foreach (var entry in found.Take(10))
+    {
+        Console.Error.WriteLine($"  {Path.GetFileName(entry)}");
+    }
+
+    if (found.Any(e => string.Equals(Path.GetFileName(e), "manifest.json", StringComparison.OrdinalIgnoreCase)))
+    {
+        Console.Error.WriteLine("\nA manifest is there but differently cased. Linux is case-sensitive: rename it to manifest.json.");
+    }
+
     return 1;
 }
 
@@ -51,6 +97,19 @@ if (dryRun)
 }
 
 var options = Options.Create(new SoundboardOptions { DataPath = dataPath });
+
+// The web app does this at startup; without it SQLite fails to create the database and the
+// tool dies with a stack trace when --data points somewhere that does not exist yet.
+try
+{
+    Directory.CreateDirectory(options.Value.DataPath);
+    Directory.CreateDirectory(options.Value.SoundsPath);
+}
+catch (Exception ex)
+{
+    Console.Error.WriteLine($"Cannot use the data directory {options.Value.RootedDataPath}: {ex.Message}");
+    return 1;
+}
 
 var services = new ServiceCollection();
 services.AddLogging(b => b.AddSimpleConsole(o => o.SingleLine = true).SetMinimumLevel(LogLevel.Warning));
