@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="src/SemperSounds.Web/wwwroot/logo.svg" alt="SemperSounds" width="128" height="128">
+</p>
+
 # SemperSounds
 
 A self-hosted Discord soundboard without the sound limit.
