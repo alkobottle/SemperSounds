@@ -5,63 +5,99 @@
 @inject ISnackbar Snackbar
 @inject AuthenticationStateProvider AuthenticationStateProvider
 
+@* Two layouts rather than one that shrinks: on a phone the labels, channel name and
+   member avatars are all dropped, leaving just the actions. *@
 @if (Playback.IsConnected)
 {
-    <MudChip T="string" Icon="@Icons.Material.Filled.VolumeUp" Color="Color.Success" Size="Size.Small">
-        @Playback.ConnectedChannelName
-    </MudChip>
+    <MudHidden Breakpoint="Breakpoint.SmAndDown">
+        <MudChip T="string" Icon="@Icons.Material.Filled.VolumeUp" Color="Color.Success" Size="Size.Small">
+            @Playback.ConnectedChannelName
+        </MudChip>
 
-    <MudAvatarGroup Max="6" Spacing="2" Class="mx-2">
-        @foreach (var member in _members)
-        {
-            <MudTooltip Text="@member.DisplayName">
-                <MudAvatar Size="Size.Small">
-                    @if (member.AvatarUrl is not null)
-                    {
-                        <MudImage Src="@member.AvatarUrl" />
-                    }
-                    else
-                    {
-                        @member.DisplayName[0]
-                    }
-                </MudAvatar>
-            </MudTooltip>
-        }
-    </MudAvatarGroup>
+        <MudAvatarGroup Max="6" Spacing="2" Class="mx-2">
+            @foreach (var member in _members)
+            {
+                <MudTooltip Text="@member.DisplayName">
+                    <MudAvatar Size="Size.Small">
+                        @if (member.AvatarUrl is not null)
+                        {
+                            <MudImage Src="@member.AvatarUrl" />
+                        }
+                        else
+                        {
+                            @member.DisplayName[0]
+                        }
+                    </MudAvatar>
+                </MudTooltip>
+            }
+        </MudAvatarGroup>
 
-    <MudButton StartIcon="@Icons.Material.Filled.Stop"
-               Color="Color.Error"
-               Variant="Variant.Filled"
-               Size="Size.Small"
-               Class="mr-2"
-               OnClick="StopAll">
-        Stop all
-    </MudButton>
+        <MudButton StartIcon="@Icons.Material.Filled.Stop"
+                   Color="Color.Error"
+                   Variant="Variant.Filled"
+                   Size="Size.Small"
+                   Class="mr-2"
+                   OnClick="StopAll">
+            Stop all
+        </MudButton>
 
-    @* Outlined so it reads as a button. Plain text against the app bar looked like a
-       status label rather than something clickable. *@
-    <MudButton StartIcon="@Icons.Material.Filled.CallEnd"
-               Color="Color.Inherit"
-               Variant="Variant.Outlined"
-               Size="Size.Small"
-               OnClick="Leave">
-        Leave
-    </MudButton>
+        @* Outlined so it reads as a button. Plain text against the app bar looked like a
+           status label rather than something clickable. *@
+        <MudButton StartIcon="@Icons.Material.Filled.CallEnd"
+                   Color="Color.Inherit"
+                   Variant="Variant.Outlined"
+                   Size="Size.Small"
+                   OnClick="Leave">
+            Leave
+        </MudButton>
+    </MudHidden>
+
+    <MudHidden Breakpoint="Breakpoint.SmAndDown" Invert="true">
+        <MudIconButton Icon="@Icons.Material.Filled.Stop"
+                       Color="Color.Error"
+                       Variant="Variant.Filled"
+                       Size="Size.Small"
+                       Class="mr-1"
+                       aria-label="Stop all"
+                       title="@($"Stop all — in {Playback.ConnectedChannelName}")"
+                       OnClick="StopAll" />
+
+        <MudIconButton Icon="@Icons.Material.Filled.CallEnd"
+                       Color="Color.Inherit"
+                       Variant="Variant.Outlined"
+                       Size="Size.Small"
+                       aria-label="Leave"
+                       title="Leave"
+                       OnClick="Leave" />
+    </MudHidden>
 }
 else
 {
-    <MudChip T="string" Icon="@Icons.Material.Filled.VolumeOff" Color="Color.Default" Size="Size.Small">
-        not in voice
-    </MudChip>
+    <MudHidden Breakpoint="Breakpoint.SmAndDown">
+        <MudChip T="string" Icon="@Icons.Material.Filled.VolumeOff" Color="Color.Default" Size="Size.Small">
+            not in voice
+        </MudChip>
 
-    <MudButton StartIcon="@Icons.Material.Filled.Login"
-               Color="Color.Primary"
-               Variant="Variant.Filled"
-               Size="Size.Small"
-               Disabled="_joining"
-               OnClick="Join">
-        Join my channel
-    </MudButton>
+        <MudButton StartIcon="@Icons.Material.Filled.Login"
+                   Color="Color.Primary"
+                   Variant="Variant.Filled"
+                   Size="Size.Small"
+                   Disabled="_joining"
+                   OnClick="Join">
+            Join my channel
+        </MudButton>
+    </MudHidden>
+
+    <MudHidden Breakpoint="Breakpoint.SmAndDown" Invert="true">
+        <MudIconButton Icon="@Icons.Material.Filled.Login"
+                       Color="Color.Primary"
+                       Variant="Variant.Filled"
+                       Size="Size.Small"
+                       Disabled="_joining"
+                       aria-label="Join my channel"
+                       title="Join my channel"
+                       OnClick="Join" />
+    </MudHidden>
 }
 
 @code {
