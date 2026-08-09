@@ -22,6 +22,10 @@
         </div>
     }
 
+    @* Deliberately no CoerceValue: it pushes the typed text into Value on every keystroke,
+       so typing "trump" added t, r, u, m and p as five separate tags. Selection is the only
+       thing that commits a tag, and Search offers the typed text as a "new" entry so
+       genuinely new tags can still be created. *@
     <MudAutocomplete T="string"
                      @ref="_autocomplete"
                      Value="@_pending"
@@ -31,11 +35,10 @@
                      Placeholder="Type to search existing tags"
                      Variant="Variant.Outlined"
                      Margin="Margin.Dense"
-                     CoerceValue="true"
                      ResetValueOnEmptyText="true"
                      Clearable="false"
                      MaxItems="10"
-                     HelperText="Pick an existing tag, or type a new one and press Enter">
+                     HelperText="Pick a suggestion, or press Enter to take the highlighted one">
         <ItemTemplate Context="tag">
             <div class="d-flex justify-space-between align-center" style="gap: 12px;">
                 <span>@tag</span>
@@ -132,6 +135,13 @@
     private async Task Add(string? tag)
     {
         _pending = null;
+
+        // Clearing the field resets the value to null, which must not count as a tag —
+        // and would otherwise re-enter through the ClearAsync below.
+        if (string.IsNullOrWhiteSpace(tag))
+        {
+            return;
+        }
 
         foreach (var parsed in TagList.Parse(tag))
         {
