@@ -38,8 +38,6 @@ public sealed class PlaybackService(
     private CancellationTokenSource? _pumpCancellation;
     private Task? _pumpTask;
     private DateTimeOffset _emptySince = DateTimeOffset.MaxValue;
-    private bool _speaking;
-    private DateTimeOffset _silentSince = DateTimeOffset.MaxValue;
     private IReadOnlySet<Guid> _playing = new HashSet<Guid>();
 
     /// <summary>
@@ -47,7 +45,7 @@ public sealed class PlaybackService(
     /// sounds would otherwise toggle the flag repeatedly, and the speaking payload is
     /// rate-limited on the voice websocket.
     /// </summary>
-    private static readonly TimeSpan SpeakingLinger = TimeSpan.FromMilliseconds(400);
+    private readonly SpeakingGate _speakingGate = new(TimeSpan.FromMilliseconds(400));
 
     /// <summary>Sound IDs currently sounding, so the UI can show them as playing.</summary>
     public IReadOnlySet<Guid> PlayingSoundIds => _playing;
@@ -92,11 +90,14 @@ public sealed class PlaybackService(
 
             await voiceClient.StartAsync(cancellationToken);
 
-            // Deliberately NOT entering the speaking state here. Discord lights the green
-            // ring from this flag, and holding it for the whole session makes an idle bot
-            // look like it is permanently transmitting. The pump raises and lowers it
-            // around actual audio instead.
-            _speaking = false;
+            // Required, and not merely cosmetic: this is what readies the connection for
+            // sending. Skipping it makes the first SendVoiceAsync throw "Connection not
+            // started". The pump lowers it again shortly afterwards, so the green ring
+            // does not stay lit for the whole session.
+            await voiceClient.EnterSpeakingStateAsync(
+                new SpeakingProperties(SpeakingFlags.Microphone), cancellationToken: cancellationToken);
+
+            _speakingGate.Reset(speaking: true);
 
             // CreateVoiceStream paces packets itself, so the pump can write frames in a
             // tight loop and let the stream throttle to real time.
@@ -241,9 +242,12 @@ public sealed class PlaybackService(
             while (!cancellationToken.IsCancellationRequested)
             {
                 var hasAudio = _mixer.MixNextFrame(frame);
-                await stream.WriteAsync(frame, cancellationToken);
 
+                // Update speaking before writing, so the flag is already raised when the
+                // first frame of a sound goes out rather than one frame late.
                 await UpdateSpeakingStateAsync(hasAudio, cancellationToken);
+
+                await stream.WriteAsync(frame, cancellationToken);
 
                 // Cheap enough to check once a second rather than every frame.
                 if (DateTimeOffset.UtcNow - idleCheck > TimeSpan.FromSeconds(1))
@@ -284,30 +288,9 @@ public sealed class PlaybackService(
             events.RaisePlaybackChanged();
         }
 
-        if (hasAudio)
+        if (_speakingGate.Update(hasAudio) is { } speaking)
         {
-            _silentSince = DateTimeOffset.MaxValue;
-
-            if (!_speaking)
-            {
-                await SetSpeakingAsync(true, cancellationToken);
-            }
-
-            return;
-        }
-
-        if (!_speaking)
-        {
-            return;
-        }
-
-        if (_silentSince == DateTimeOffset.MaxValue)
-        {
-            _silentSince = DateTimeOffset.UtcNow;
-        }
-        else if (DateTimeOffset.UtcNow - _silentSince >= SpeakingLinger)
-        {
-            await SetSpeakingAsync(false, cancellationToken);
+            await SetSpeakingAsync(speaking, cancellationToken);
         }
     }
 
@@ -323,13 +306,13 @@ public sealed class PlaybackService(
             await client.EnterSpeakingStateAsync(
                 new SpeakingProperties(speaking ? SpeakingFlags.Microphone : default),
                 cancellationToken: cancellationToken);
-
-            _speaking = speaking;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            // A failed speaking update is cosmetic; audio still flows. Do not kill the pump.
+            // A failed speaking update is cosmetic; audio still flows. Do not kill the
+            // pump, but put the gate back so the next frame retries the transition.
             logger.LogDebug(ex, "Could not update the speaking state");
+            _speakingGate.Reset(!speaking);
         }
     }
 
@@ -381,8 +364,7 @@ public sealed class PlaybackService(
 
         _mixer.StopAll();
         _playing = new HashSet<Guid>();
-        _speaking = false;
-        _silentSince = DateTimeOffset.MaxValue;
+        _speakingGate.Reset(speaking: false);
 
         if (_audioStream is not null)
         {
