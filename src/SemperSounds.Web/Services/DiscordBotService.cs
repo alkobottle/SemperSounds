@@ -29,9 +29,13 @@ public sealed class DiscordBotService : IHostedService, IDisposable
             new BotToken(_options.BotToken),
             new GatewayClientConfiguration
             {
-                // Both are non-privileged, so nothing needs enabling in the developer
-                // portal. Voice states are what gate who may press play.
-                Intents = GatewayIntents.Guilds | GatewayIntents.GuildVoiceStates,
+                // GuildUsers is privileged and must also be enabled in the developer portal
+                // (Bot -> Server Members Intent). Without it Discord sends only the bot's
+                // own member object in GUILD_CREATE, leaving Guild.Users effectively empty
+                // — which silently broke avatar lookups and the idle auto-leave.
+                Intents = GatewayIntents.Guilds
+                    | GatewayIntents.GuildVoiceStates
+                    | GatewayIntents.GuildUsers,
             });
     }
 
@@ -45,6 +49,7 @@ public sealed class DiscordBotService : IHostedService, IDisposable
         Client.Ready += OnReadyAsync;
         Client.VoiceStateUpdate += OnVoiceStateUpdateAsync;
         Client.GuildCreate += OnGuildCreateAsync;
+        Client.GuildUserChunk += OnGuildUserChunkAsync;
         Client.Disconnect += OnDisconnectAsync;
 
         // Deliberately not awaited to completion: StartAsync connects and then runs the
@@ -85,12 +90,48 @@ public sealed class DiscordBotService : IHostedService, IDisposable
     /// GUILD_CREATE carries the full voice state list, which is how the UI knows who is
     /// already sitting in a channel without waiting for someone to move.
     /// </summary>
-    private ValueTask OnGuildCreateAsync(GuildCreateEventArgs args)
+    private async ValueTask OnGuildCreateAsync(GuildCreateEventArgs args)
     {
-        if (args.Guild?.Id == _options.GuildId)
+        if (args.Guild?.Id != _options.GuildId)
+        {
+            return;
+        }
+
+        _logger.LogInformation(
+            "Guild {Name} cached with {VoiceStates} voice states and {Users} users",
+            args.Guild.Name, args.Guild.VoiceStates.Count, args.Guild.Users.Count);
+
+        _events.RaiseVoiceStateChanged();
+
+        // Above Discord's large_threshold (50 by default) GUILD_CREATE omits members, so a
+        // 51-member guild arrives with an all-but-empty user list. Asking for them
+        // explicitly is size-independent, unlike raising the threshold, which would only
+        // postpone the same silent failure to 250 members.
+        try
+        {
+            await Client.RequestGuildUsersAsync(
+                new GuildUsersRequestProperties(_options.GuildId) { Query = string.Empty, Limit = 0 });
+        }
+        catch (Exception ex)
+        {
+            // Not fatal: avatars and names fall back to initials, and playback is unaffected.
+            _logger.LogWarning(ex, "Could not request the guild member list");
+        }
+    }
+
+    /// <summary>
+    /// Members arrive in chunks after <see cref="OnGuildCreateAsync"/> asks for them.
+    /// NetCord folds each chunk into the guild cache; this only reports progress and
+    /// nudges the UI so avatars appear without a reload.
+    /// </summary>
+    private ValueTask OnGuildUserChunkAsync(GuildUserChunkEventArgs args)
+    {
+        if (args.GuildId == _options.GuildId)
         {
             _logger.LogInformation(
-                "Guild {Name} cached with {Count} voice states", args.Guild.Name, args.Guild.VoiceStates.Count);
+                "Received member chunk {Index} of {Count} ({Users} users)",
+                args.ChunkIndex + 1, args.ChunkCount, args.Users.Count);
+
             _events.RaiseVoiceStateChanged();
         }
 
@@ -112,6 +153,7 @@ public sealed class DiscordBotService : IHostedService, IDisposable
         Client.Ready -= OnReadyAsync;
         Client.VoiceStateUpdate -= OnVoiceStateUpdateAsync;
         Client.GuildCreate -= OnGuildCreateAsync;
+        Client.GuildUserChunk -= OnGuildUserChunkAsync;
         Client.Disconnect -= OnDisconnectAsync;
         Client.Dispose();
     }

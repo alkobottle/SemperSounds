@@ -93,18 +93,39 @@
 
         @if (_allTags.Count > 0)
         {
-            <MudChipSet T="string"
-                        @bind-SelectedValues="_selectedTags"
-                        @bind-SelectedValues:after="ApplyFilter"
-                        SelectionMode="SelectionMode.MultiSelection"
-                        Class="mb-4">
-                @foreach (var tag in _allTags)
+            @* CheckMark belongs on the set, not the chip — on MudChip it trips the MUD0002
+               analyzer. MudBlazor ships no filled-and-selected CSS rule and has no
+               SelectedVariant parameter, so the fill has to be switched per chip; selecting
+               one otherwise only added a ~6% tint and was effectively invisible. *@
+            <div class="d-flex align-center flex-wrap gap-2 mb-4">
+                <MudChipSet T="string"
+                            @bind-SelectedValues="_selectedTags"
+                            @bind-SelectedValues:after="ApplyFilter"
+                            SelectionMode="SelectionMode.MultiSelection"
+                            CheckMark="true">
+                    @foreach (var tag in _allTags)
+                    {
+                        <MudChip T="string"
+                                 Value="@tag"
+                                 Size="Size.Small"
+                                 Color="Color.Primary"
+                                 Variant="@(_selectedTags.Contains(tag) ? Variant.Filled : Variant.Outlined)">
+                            @tag
+                        </MudChip>
+                    }
+                </MudChipSet>
+
+                @if (_selectedTags.Count > 0)
                 {
-                    <MudChip T="string" Value="@tag" Size="Size.Small" Color="Color.Primary" Variant="Variant.Outlined">
-                        @tag
-                    </MudChip>
+                    <MudButton Size="Size.Small"
+                               Variant="Variant.Text"
+                               Color="Color.Default"
+                               StartIcon="@Icons.Material.Filled.FilterAltOff"
+                               OnClick="ClearTagFilter">
+                        Clear
+                    </MudButton>
                 }
-            </MudChipSet>
+            </div>
         }
 
         @if (_loading)
@@ -290,6 +311,13 @@
         ApplyFilter();
 
         _recent = await Activity.GetRecentAsync(15);
+    }
+
+    /// <summary>MudChipSet has no clear API; reassigning the bound field deselects them.</summary>
+    private void ClearTagFilter()
+    {
+        _selectedTags = [];
+        ApplyFilter();
     }
 
     private void ApplyFilter()

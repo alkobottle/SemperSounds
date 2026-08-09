@@ -43,7 +43,9 @@ public sealed class VoiceStateTracker(
 
         return [.. guild.VoiceStates.Values
             .Where(state => state.ChannelId == channelId)
-            .Select(state => users.Resolve(state.UserId))
+            // The fallback keeps a cache miss showing something readable rather than a
+            // raw snowflake; VoiceState carries the member Discord sends with the event.
+            .Select(state => users.Resolve(state.UserId, state.User?.Username))
             .Select(user => new VoiceMember(user.UserId, user.DisplayName, user.AvatarUrl))
             .OrderBy(member => member.DisplayName, StringComparer.OrdinalIgnoreCase)];
     }
@@ -65,8 +67,16 @@ public sealed class VoiceStateTracker(
             return null;
         }
 
+        // Excluding our own bot by id, not by IsBot. IsBot reads guild.Users, which is
+        // empty without the privileged GuildUsers intent — the bot then counted itself as
+        // a listener, occupancy was never zero, and the idle auto-leave never fired at all.
+        // The bot's own id is available from the cache with no intent, so this keeps
+        // working even if that intent is revoked.
+        var selfId = bot.Client.Cache.User?.Id;
+
         return guild.VoiceStates.Values.Count(state =>
             state.ChannelId == channelId &&
+            state.UserId != selfId &&
             !(guild.Users.TryGetValue(state.UserId, out var user) && user.IsBot));
     }
 
