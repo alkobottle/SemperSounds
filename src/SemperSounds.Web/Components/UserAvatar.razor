@@ -25,7 +25,9 @@
 
     @if (ShowName)
     {
-        <span class="text-truncate">@user.DisplayName</span>
+        @* Nicknames often carry a trailing emoji; without this the name breaks at that
+           space and pushes the emoji onto a second line, making the tile taller. *@
+        <span class="ss-truncate">@user.DisplayName</span>
     }
 </span>
 

@@ -1,6 +1,27 @@
 /* MudBlazor supplies the component styling and CSS reset.
    Only app-specific overrides belong here. */
 
+/* Truncation utilities. `text-truncate` is a Bootstrap class, and Bootstrap was removed
+   during scaffolding — so every use of it here silently did nothing, letting long names
+   and emoji-bearing nicknames wrap and leaving tiles at different heights. */
+.ss-truncate {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+}
+
+/* Two lines, always occupying two lines' worth of height, so a one-line and a two-line
+   title leave their tiles the same height and the Play buttons stay on a row. */
+.ss-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    min-height: 2.5em;
+    line-height: 1.25;
+}
+
 html, body {
     margin: 0;
     padding: 0;

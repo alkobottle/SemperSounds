@@ -112,13 +112,10 @@ public sealed class PlaybackService(
             await voiceClient.EnterSpeakingStateAsync(
                 new SpeakingProperties(SpeakingFlags.Microphone), cancellationToken: cancellationToken);
 
+            // Start from "speaking", matching the call just made, and let the pump lower it
+            // once the linger expires. The audio stream itself is opened lazily per burst,
+            // so an idle bot sends nothing at all.
             _speakingGate.Reset(speaking: true);
-
-            // CreateVoiceStream paces packets itself, so the pump can write frames in a
-            // tight loop and let the stream throttle to real time.
-            var voiceStream = voiceClient.CreateVoiceStream();
-            _audioStream = new OpusEncodeStream(
-                voiceStream, PcmFormat.Short, VoiceChannels.Stereo, OpusApplication.Audio);
 
             _voiceClient = voiceClient;
             ConnectedChannelId = channelId;
@@ -266,14 +263,21 @@ public sealed class PlaybackService(
     }
 
     /// <summary>
-    /// Writes one mixed frame at a time for as long as the bot is connected, including
-    /// silence. Keeping the cadence unbroken is simpler and steadier than starting and
-    /// stopping the stream around each sound, and the bandwidth is negligible.
+    /// Sends audio only while there is audio to send.
     /// </summary>
+    /// <remarks>
+    /// This used to write silence continuously to keep the cadence steady. That is what
+    /// kept Discord's green ring lit permanently: the ring follows packet flow, not just
+    /// the speaking flag, so lowering the flag alone did nothing while frames kept
+    /// arriving. Real clients stop transmitting when nobody is talking, and so does this.
+    ///
+    /// Each speaking burst also gets a fresh stream. NetCord's voice stream normalizes
+    /// sending speed against a clock, and resuming a long-idle stream would let it believe
+    /// it was far behind and rush frames to catch up.
+    /// </remarks>
     private async Task PumpAsync(CancellationToken cancellationToken)
     {
         var frame = new byte[AudioFormat.BytesPerFrame];
-        var stream = _audioStream!;
         var idleCheck = DateTimeOffset.UtcNow;
 
         try
@@ -282,11 +286,24 @@ public sealed class PlaybackService(
             {
                 var hasAudio = _mixer.MixNextFrame(frame);
 
-                // Update speaking before writing, so the flag is already raised when the
-                // first frame of a sound goes out rather than one frame late.
+                // Decide before writing, so the flag is raised as the first frame goes out
+                // rather than one frame late.
                 await UpdateSpeakingStateAsync(hasAudio, cancellationToken);
 
-                await stream.WriteAsync(frame, cancellationToken);
+                if (_speakingGate.IsSpeaking)
+                {
+                    // Covers the linger too, so the tail of a clip is flushed before the
+                    // stream closes rather than being clipped.
+                    await EnsureAudioStreamAsync(cancellationToken);
+                    await _audioStream!.WriteAsync(frame, cancellationToken);
+                }
+                else
+                {
+                    await CloseAudioStreamAsync();
+
+                    // Nothing is being written, so the stream cannot pace us here.
+                    await Task.Delay(AudioFormat.FrameMilliseconds, cancellationToken);
+                }
 
                 // Cheap enough to check once a second rather than every frame.
                 if (DateTimeOffset.UtcNow - idleCheck > TimeSpan.FromSeconds(1))
@@ -374,6 +391,45 @@ public sealed class PlaybackService(
         }
     }
 
+    /// <summary>Opens an audio stream for a speaking burst, if one is not already open.</summary>
+    private ValueTask EnsureAudioStreamAsync(CancellationToken cancellationToken)
+    {
+        if (_audioStream is not null || _voiceClient is not { } client)
+        {
+            return ValueTask.CompletedTask;
+        }
+
+        // PcmFormat.Short matches what PcmMixer produces, so nothing converts in between.
+        _audioStream = new OpusEncodeStream(
+            client.CreateVoiceStream(), PcmFormat.Short, VoiceChannels.Stereo, OpusApplication.Audio);
+
+        return ValueTask.CompletedTask;
+    }
+
+    /// <summary>
+    /// Ends a speaking burst. Flushing first lets the encoder emit its trailing silence
+    /// frames, which is how Discord is told the burst is over.
+    /// </summary>
+    private async ValueTask CloseAudioStreamAsync()
+    {
+        if (_audioStream is not { } stream)
+        {
+            return;
+        }
+
+        _audioStream = null;
+
+        try
+        {
+            await stream.FlushAsync();
+            await stream.DisposeAsync();
+        }
+        catch (Exception ex)
+        {
+            logger.LogDebug(ex, "Error closing the audio stream");
+        }
+    }
+
     private bool ShouldLeaveIdleChannel()
     {
         if (ConnectedChannelId is not { } channelId)
@@ -417,19 +473,7 @@ public sealed class PlaybackService(
         _playing = new HashSet<Guid>();
         _speakingGate.Reset(speaking: false);
 
-        if (_audioStream is not null)
-        {
-            try
-            {
-                await _audioStream.DisposeAsync();
-            }
-            catch (Exception ex)
-            {
-                logger.LogDebug(ex, "Error disposing the audio stream");
-            }
-
-            _audioStream = null;
-        }
+        await CloseAudioStreamAsync();
 
         if (_voiceClient is not null)
         {
