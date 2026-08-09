@@ -8,7 +8,9 @@ COPY SemperSounds.slnx ./
 COPY src/SemperSounds.Core/SemperSounds.Core.csproj src/SemperSounds.Core/
 COPY src/SemperSounds.Web/SemperSounds.Web.csproj src/SemperSounds.Web/
 COPY tests/SemperSounds.Tests/SemperSounds.Tests.csproj tests/SemperSounds.Tests/
-RUN dotnet restore src/SemperSounds.Web/SemperSounds.Web.csproj
+COPY tools/SemperSounds.Import/SemperSounds.Import.csproj tools/SemperSounds.Import/
+RUN dotnet restore src/SemperSounds.Web/SemperSounds.Web.csproj \
+ && dotnet restore tools/SemperSounds.Import/SemperSounds.Import.csproj
 
 COPY . .
 
@@ -19,6 +21,11 @@ COPY . .
 # script 404s -- the page renders but nothing is interactive. The restore above still
 # earns its place by populating the NuGet cache.
 RUN dotnet publish src/SemperSounds.Web/SemperSounds.Web.csproj \
+    -c Release -o /app
+
+# Bulk importer, published alongside the app so it can be run as a one-off against the
+# same volume — it needs the ffmpeg this image already carries.
+RUN dotnet publish tools/SemperSounds.Import/SemperSounds.Import.csproj \
     -c Release -o /app
 
 

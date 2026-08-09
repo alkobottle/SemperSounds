@@ -29,3 +29,6 @@ appsettings.Local.json
 ## OS noise
 Thumbs.db
 .DS_Store
+
+## Sounds exported from Discord's soundboard for migration. Data, not code.
+/migration/

@@ -96,6 +96,45 @@ Leave `App__PublicBaseUrl` empty in development so Kestrel's own URL is used.
 dotnet test            # unit tests, no Discord or ffmpeg required
 ```
 
+## Bulk import
+
+Useful for migrating an existing Discord soundboard, where uploading by hand would mean
+re-entering every name and emoji.
+
+Put the audio files and a `manifest.json` in a folder, drop it under the data volume
+(`./data/import`), and run the importer from the running container — it needs the ffmpeg
+the image already carries:
+
+```bash
+docker compose exec sempersounds dotnet SemperSounds.Import.dll /data/import --dry-run
+docker compose exec sempersounds dotnet SemperSounds.Import.dll /data/import
+```
+
+`manifest.json` is an array of:
+
+```json
+[{ "file": "01_airhorn.mp3", "name": "Airhorn", "emoji": "📣",
+   "tags": "meme, loud", "uploaderId": "277501102943895552", "uploaderName": "alkobottle" }]
+```
+
+`emoji` takes either a standard emoji or Discord's `<:name:id>` form. Imports run through
+the same validation and loudness normalization as the web upload, and skip any name that
+already exists, so re-running is safe.
+
+### Exporting a Discord soundboard
+
+The bot can list the guild's sounds itself; the audio downloads from the CDN even for
+sounds the server can no longer play because its boosts lapsed:
+
+```bash
+curl -H "Authorization: Bot $TOKEN" \
+  https://discord.com/api/v10/guilds/$GUILD_ID/soundboard-sounds
+curl -o sound.mp3 https://cdn.discordapp.com/soundboard-sounds/$SOUND_ID
+```
+
+Custom emoji come back with `emoji_id` and a null `emoji_name`, so the names have to be
+resolved separately from `/guilds/{id}/emojis`.
+
 ## Configuration
 
 Every setting binds from the config file in development and from environment variables in
