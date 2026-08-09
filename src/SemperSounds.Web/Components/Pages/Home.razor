@@ -42,14 +42,17 @@
                             </div>
 
                             <div class="d-flex gap-1">
+                                @{
+                                    var favoritePlaying = _playingIds.Contains(sound.Id);
+                                }
                                 <MudButton Variant="Variant.Filled"
-                                           Color="Color.Primary"
+                                           Color="@(favoritePlaying ? Color.Success : Color.Primary)"
                                            Size="Size.Small"
-                                           StartIcon="@Icons.Material.Filled.PlayArrow"
-                                           Disabled="!_canPlay"
+                                           StartIcon="@(favoritePlaying ? Icons.Material.Filled.GraphicEq : Icons.Material.Filled.PlayArrow)"
+                                           Disabled="@(!_canPlay || favoritePlaying)"
                                            OnClick="@(() => Play(sound))"
                                            Class="flex-grow-1">
-                                    Play
+                                    @(favoritePlaying ? "Playing" : "Play")
                                 </MudButton>
                                 <MudIconButton Icon="@Icons.Material.Filled.ArrowUpward"
                                                Size="Size.Small"
@@ -121,6 +124,7 @@
                 @foreach (var sound in _filtered)
                 {
                     var isFavorite = _favoriteIds.Contains(sound.Id);
+                    var isPlaying = _playingIds.Contains(sound.Id);
 
                     <MudItem xs="6" sm="4" md="3" lg="2">
                         <MudPaper Class="pa-3 d-flex flex-column" Style="height: 100%;" Elevation="2">
@@ -150,13 +154,13 @@
 
                             <div class="d-flex gap-1 mt-2">
                                 <MudButton Variant="Variant.Filled"
-                                           Color="Color.Primary"
+                                           Color="@(isPlaying ? Color.Success : Color.Primary)"
                                            Size="Size.Small"
-                                           StartIcon="@Icons.Material.Filled.PlayArrow"
-                                           Disabled="!_canPlay"
+                                           StartIcon="@(isPlaying ? Icons.Material.Filled.GraphicEq : Icons.Material.Filled.PlayArrow)"
+                                           Disabled="@(!_canPlay || isPlaying)"
                                            OnClick="@(() => Play(sound))"
                                            Class="flex-grow-1">
-                                    Play
+                                    @(isPlaying ? "Playing" : "Play")
                                 </MudButton>
 
                                 <MudTooltip Text="Preview in your browser only">
@@ -212,6 +216,7 @@
 @code {
     private List<Favorite> _favorites = [];
     private HashSet<Guid> _favoriteIds = [];
+    private IReadOnlySet<Guid> _playingIds = new HashSet<Guid>();
 
     private List<Sound> _all = [];
     private List<Sound> _filtered = [];
@@ -236,6 +241,7 @@
         Events.LibraryChanged += OnLibraryChanged;
         Events.ConnectionChanged += OnConnectionChanged;
         Events.VoiceStateChanged += OnConnectionChanged;
+        Events.PlaybackChanged += OnPlaybackChanged;
 
         await ReloadAsync();
         UpdateCanPlay();
@@ -387,6 +393,13 @@
         StateHasChanged();
     });
 
+    // Raised from the playback pump thread, so it has to marshal onto the circuit.
+    private void OnPlaybackChanged() => InvokeAsync(() =>
+    {
+        _playingIds = Playback.PlayingSoundIds;
+        StateHasChanged();
+    });
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
@@ -429,6 +442,7 @@
         Events.LibraryChanged -= OnLibraryChanged;
         Events.ConnectionChanged -= OnConnectionChanged;
         Events.VoiceStateChanged -= OnConnectionChanged;
+        Events.PlaybackChanged -= OnPlaybackChanged;
         _hotkeyRef?.Dispose();
     }
 }

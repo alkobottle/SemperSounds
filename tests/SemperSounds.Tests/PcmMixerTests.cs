@@ -134,6 +134,54 @@ public class PcmMixerTests
     }
 
     [Fact]
+    public void ActiveKeys_ReportWhichClipsAreSounding()
+    {
+        // The UI needs this to show a tile as playing and stop it being retriggered.
+        var mixer = new PcmMixer();
+        var first = Guid.NewGuid();
+        var second = Guid.NewGuid();
+
+        mixer.Add(Pcm(new short[AudioFormat.SamplesPerFrame * 3]), first);
+        mixer.Add(Pcm(1234, 5678), second);
+
+        Assert.Contains(first, mixer.ActiveKeys);
+        Assert.Contains(second, mixer.ActiveKeys);
+        Assert.Equal(2, mixer.ActiveKeys.Count);
+
+        var frame = new byte[AudioFormat.BytesPerFrame];
+        mixer.MixNextFrame(frame);
+
+        // The short clip is spent after one frame; the long one is still going.
+        Assert.Equal([first], mixer.ActiveKeys);
+    }
+
+    [Fact]
+    public void SameClipTwice_StaysActiveUntilBothCopiesFinish()
+    {
+        var mixer = new PcmMixer();
+        var key = Guid.NewGuid();
+
+        mixer.Add(Pcm(1234, 5678), key);
+        mixer.Add(Pcm(new short[AudioFormat.SamplesPerFrame * 3]), key);
+
+        var frame = new byte[AudioFormat.BytesPerFrame];
+        mixer.MixNextFrame(frame);
+
+        Assert.Equal([key], mixer.ActiveKeys);
+    }
+
+    [Fact]
+    public void StopAll_ClearsActiveKeys()
+    {
+        var mixer = new PcmMixer();
+        mixer.Add(Pcm(new short[AudioFormat.SamplesPerFrame * 4]), Guid.NewGuid());
+
+        mixer.StopAll();
+
+        Assert.Empty(mixer.ActiveKeys);
+    }
+
+    [Fact]
     public void ClipWithTrailingOddByte_IsStillEvicted()
     {
         // A truncated or corrupt file can end mid-sample. That last lone byte can never

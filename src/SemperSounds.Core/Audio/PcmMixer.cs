@@ -12,9 +12,13 @@ namespace SemperSounds.Core.Audio;
 /// </remarks>
 public sealed class PcmMixer
 {
-    private sealed class Voice(byte[] pcm)
+    private sealed class Voice(byte[] pcm, Guid key)
     {
         public byte[] Pcm { get; } = pcm;
+
+        /// <summary>Identifies what is playing, so callers can show it as active.</summary>
+        public Guid Key { get; } = key;
+
         public int Position { get; set; }
     }
 
@@ -33,8 +37,24 @@ public sealed class PcmMixer
         }
     }
 
+    /// <summary>
+    /// Which clips are sounding right now. Derived from the live voice list rather than
+    /// tracked separately, so firing one clip twice keeps it active until both finish.
+    /// </summary>
+    public IReadOnlySet<Guid> ActiveKeys
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _voices.Select(voice => voice.Key).ToHashSet();
+            }
+        }
+    }
+
     /// <summary>Starts playing a clip. It mixes with anything already playing.</summary>
-    public void Add(byte[] pcm)
+    /// <param name="key">Identifies the clip so callers can tell what is sounding.</param>
+    public void Add(byte[] pcm, Guid key = default)
     {
         if (pcm.Length < AudioFormat.BytesPerSample)
         {
@@ -43,7 +63,7 @@ public sealed class PcmMixer
 
         lock (_gate)
         {
-            _voices.Add(new Voice(pcm));
+            _voices.Add(new Voice(pcm, key));
         }
     }
 

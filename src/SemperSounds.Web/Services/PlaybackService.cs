@@ -38,6 +38,21 @@ public sealed class PlaybackService(
     private CancellationTokenSource? _pumpCancellation;
     private Task? _pumpTask;
     private DateTimeOffset _emptySince = DateTimeOffset.MaxValue;
+    private bool _speaking;
+    private DateTimeOffset _silentSince = DateTimeOffset.MaxValue;
+    private IReadOnlySet<Guid> _playing = new HashSet<Guid>();
+
+    /// <summary>
+    /// How long to stay in the speaking state after the last audio ends. Rapid-fire
+    /// sounds would otherwise toggle the flag repeatedly, and the speaking payload is
+    /// rate-limited on the voice websocket.
+    /// </summary>
+    private static readonly TimeSpan SpeakingLinger = TimeSpan.FromMilliseconds(400);
+
+    /// <summary>Sound IDs currently sounding, so the UI can show them as playing.</summary>
+    public IReadOnlySet<Guid> PlayingSoundIds => _playing;
+
+    public bool IsPlaying(Guid soundId) => _playing.Contains(soundId);
 
     /// <summary>The channel the bot is currently connected to, if any.</summary>
     public ulong? ConnectedChannelId { get; private set; }
@@ -76,8 +91,12 @@ public sealed class PlaybackService(
                 _discord.GuildId, channelId, cancellationToken: cancellationToken);
 
             await voiceClient.StartAsync(cancellationToken);
-            await voiceClient.EnterSpeakingStateAsync(
-                new SpeakingProperties(SpeakingFlags.Microphone), cancellationToken: cancellationToken);
+
+            // Deliberately NOT entering the speaking state here. Discord lights the green
+            // ring from this flag, and holding it for the whole session makes an idle bot
+            // look like it is permanently transmitting. The pump raises and lowers it
+            // around actual audio instead.
+            _speaking = false;
 
             // CreateVoiceStream paces packets itself, so the pump can write frames in a
             // tight loop and let the stream throttle to real time.
@@ -161,7 +180,7 @@ public sealed class PlaybackService(
             return PlaybackResult.Fail("That sound's audio file is missing.");
         }
 
-        _mixer.Add(pcm);
+        _mixer.Add(pcm, sound.Id);
         _lastPlayed[userId] = DateTimeOffset.UtcNow;
 
         await library.LogPlayAsync(sound, userId, userName, channelId, cancellationToken);
@@ -173,7 +192,15 @@ public sealed class PlaybackService(
     }
 
     /// <summary>Silences everything currently playing without leaving the channel.</summary>
-    public void StopAll() => _mixer.StopAll();
+    public void StopAll()
+    {
+        _mixer.StopAll();
+
+        // Publish straight away rather than waiting for the next pump frame, so the tiles
+        // stop looking like they are playing the instant the button is pressed.
+        _playing = new HashSet<Guid>();
+        events.RaisePlaybackChanged();
+    }
 
     public int ActiveSoundCount => _mixer.ActiveCount;
 
@@ -213,8 +240,10 @@ public sealed class PlaybackService(
         {
             while (!cancellationToken.IsCancellationRequested)
             {
-                _mixer.MixNextFrame(frame);
+                var hasAudio = _mixer.MixNextFrame(frame);
                 await stream.WriteAsync(frame, cancellationToken);
+
+                await UpdateSpeakingStateAsync(hasAudio, cancellationToken);
 
                 // Cheap enough to check once a second rather than every frame.
                 if (DateTimeOffset.UtcNow - idleCheck > TimeSpan.FromSeconds(1))
@@ -236,6 +265,71 @@ public sealed class PlaybackService(
         {
             logger.LogError(ex, "Voice pump stopped unexpectedly");
             _ = Task.Run(LeaveAsync, CancellationToken.None);
+        }
+    }
+
+    /// <summary>
+    /// Raises the speaking flag while audio is sounding and lowers it once the channel has
+    /// been silent for <see cref="SpeakingLinger"/>. Discord's green ring follows this flag,
+    /// so leaving it raised for the whole session made an idle bot look like it was
+    /// permanently transmitting. Also publishes which sounds are playing, for the UI.
+    /// </summary>
+    private async Task UpdateSpeakingStateAsync(bool hasAudio, CancellationToken cancellationToken)
+    {
+        var active = _mixer.ActiveKeys;
+
+        if (!active.SetEquals(_playing))
+        {
+            _playing = active;
+            events.RaisePlaybackChanged();
+        }
+
+        if (hasAudio)
+        {
+            _silentSince = DateTimeOffset.MaxValue;
+
+            if (!_speaking)
+            {
+                await SetSpeakingAsync(true, cancellationToken);
+            }
+
+            return;
+        }
+
+        if (!_speaking)
+        {
+            return;
+        }
+
+        if (_silentSince == DateTimeOffset.MaxValue)
+        {
+            _silentSince = DateTimeOffset.UtcNow;
+        }
+        else if (DateTimeOffset.UtcNow - _silentSince >= SpeakingLinger)
+        {
+            await SetSpeakingAsync(false, cancellationToken);
+        }
+    }
+
+    private async Task SetSpeakingAsync(bool speaking, CancellationToken cancellationToken)
+    {
+        if (_voiceClient is not { } client)
+        {
+            return;
+        }
+
+        try
+        {
+            await client.EnterSpeakingStateAsync(
+                new SpeakingProperties(speaking ? SpeakingFlags.Microphone : default),
+                cancellationToken: cancellationToken);
+
+            _speaking = speaking;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // A failed speaking update is cosmetic; audio still flows. Do not kill the pump.
+            logger.LogDebug(ex, "Could not update the speaking state");
         }
     }
 
@@ -286,6 +380,9 @@ public sealed class PlaybackService(
         _pumpTask = null;
 
         _mixer.StopAll();
+        _playing = new HashSet<Guid>();
+        _speaking = false;
+        _silentSince = DateTimeOffset.MaxValue;
 
         if (_audioStream is not null)
         {

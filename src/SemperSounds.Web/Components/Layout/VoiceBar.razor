@@ -38,8 +38,11 @@
         Stop all
     </MudButton>
 
+    @* Outlined so it reads as a button. Plain text against the app bar looked like a
+       status label rather than something clickable. *@
     <MudButton StartIcon="@Icons.Material.Filled.CallEnd"
                Color="Color.Inherit"
+               Variant="Variant.Outlined"
                Size="Size.Small"
                OnClick="Leave">
         Leave

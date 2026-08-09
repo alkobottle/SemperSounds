@@ -23,8 +23,12 @@ public sealed class SoundboardEvents
     /// <summary>The library changed (upload or delete).</summary>
     public event Action? LibraryChanged;
 
+    /// <summary>The set of currently sounding clips changed.</summary>
+    public event Action? PlaybackChanged;
+
     public void RaiseSoundPlayed(SoundPlayedNotification notification) => SoundPlayed?.Invoke(notification);
     public void RaiseVoiceStateChanged() => VoiceStateChanged?.Invoke();
     public void RaiseConnectionChanged() => ConnectionChanged?.Invoke();
     public void RaiseLibraryChanged() => LibraryChanged?.Invoke();
+    public void RaisePlaybackChanged() => PlaybackChanged?.Invoke();
 }
