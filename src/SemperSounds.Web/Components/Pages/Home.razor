@@ -2,6 +2,7 @@
 @attribute [Authorize]
 @implements IDisposable
 @inject SoundLibrary Library
+@inject FavoriteLibrary Favorites
 @inject PlaybackService Playback
 @inject SoundboardEvents Events
 @inject ISnackbar Snackbar
@@ -12,6 +13,65 @@
 
 <MudGrid>
     <MudItem xs="12" md="9">
+        @* Favourites sit above the search box and are deliberately unaffected by it:
+           their whole purpose is that they stay put and their keys keep working. *@
+        @if (_favorites.Count > 0)
+        {
+            <div class="d-flex align-center gap-2 mb-2">
+                <MudIcon Icon="@Icons.Material.Filled.Star" Color="Color.Warning" Size="Size.Small" />
+                <MudText Typo="Typo.subtitle2">Favourites</MudText>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">press 1–@FavoriteLibrary.MaxSlots</MudText>
+            </div>
+
+            <MudGrid Spacing="2" Class="mb-4">
+                @foreach (var favorite in _favorites)
+                {
+                    var sound = favorite.Sound!;
+                    <MudItem xs="6" sm="4" md="3" lg="2">
+                        <MudPaper Class="pa-2" Elevation="3" Style="border-left: 3px solid var(--mud-palette-warning);">
+                            <div class="d-flex align-center mb-1" style="gap: 8px;">
+                                <SoundEmojiView Value="@sound.Emoji" Size="28" />
+                                <div class="flex-grow-1" style="min-width: 0;">
+                                    <MudText Typo="Typo.body2" Class="text-truncate" title="@sound.Name">
+                                        @sound.Name
+                                    </MudText>
+                                </div>
+                                <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Filled">
+                                    @favorite.Slot
+                                </MudChip>
+                            </div>
+
+                            <div class="d-flex gap-1">
+                                <MudButton Variant="Variant.Filled"
+                                           Color="Color.Primary"
+                                           Size="Size.Small"
+                                           StartIcon="@Icons.Material.Filled.PlayArrow"
+                                           Disabled="!_canPlay"
+                                           OnClick="@(() => Play(sound))"
+                                           Class="flex-grow-1">
+                                    Play
+                                </MudButton>
+                                <MudIconButton Icon="@Icons.Material.Filled.ArrowUpward"
+                                               Size="Size.Small"
+                                               Disabled="@(favorite.Slot == 1)"
+                                               OnClick="@(() => Move(sound.Id, up: true))" />
+                                <MudIconButton Icon="@Icons.Material.Filled.ArrowDownward"
+                                               Size="Size.Small"
+                                               Disabled="@(favorite.Slot == _favorites.Count)"
+                                               OnClick="@(() => Move(sound.Id, up: false))" />
+                                <MudIconButton Icon="@Icons.Material.Filled.Star"
+                                               Color="Color.Warning"
+                                               Size="Size.Small"
+                                               OnClick="@(() => ToggleFavorite(sound))" />
+                            </div>
+                        </MudPaper>
+                    </MudItem>
+                }
+            </MudGrid>
+
+            <MudDivider Class="mb-4" />
+        }
+
         <div class="d-flex align-center gap-4 mb-4">
             <MudTextField @bind-Value="_search"
                           @bind-Value:after="ApplyFilter"
@@ -58,10 +118,9 @@
         else
         {
             <MudGrid Spacing="3">
-                @for (var i = 0; i < _filtered.Count; i++)
+                @foreach (var sound in _filtered)
                 {
-                    var sound = _filtered[i];
-                    var hotkey = i < HotkeyOrder.Length ? HotkeyOrder[i].ToString() : null;
+                    var isFavorite = _favoriteIds.Contains(sound.Id);
 
                     <MudItem xs="6" sm="4" md="3" lg="2">
                         <MudPaper Class="pa-3 d-flex flex-column" Style="height: 100%;" Elevation="2">
@@ -79,12 +138,12 @@
                                     </MudText>
                                 </div>
 
-                                @if (hotkey is not null)
-                                {
-                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">
-                                        @hotkey
-                                    </MudChip>
-                                }
+                                <MudTooltip Text="@(isFavorite ? "Remove from favourites" : "Add to favourites")">
+                                    <MudIconButton Icon="@(isFavorite ? Icons.Material.Filled.Star : Icons.Material.Outlined.StarBorder)"
+                                                   Color="@(isFavorite ? Color.Warning : Color.Default)"
+                                                   Size="Size.Small"
+                                                   OnClick="@(() => ToggleFavorite(sound))" />
+                                </MudTooltip>
                             </div>
 
                             <MudSpacer />
@@ -151,9 +210,8 @@
 <audio @ref="_previewPlayer" style="display:none"></audio>
 
 @code {
-    /// <summary>Hotkeys bound to the first tiles, in the order they appear.</summary>
-    private static readonly char[] HotkeyOrder =
-        "1234567890qwertyuiopasdfghjklzxcvbnm".ToCharArray();
+    private List<Favorite> _favorites = [];
+    private HashSet<Guid> _favoriteIds = [];
 
     private List<Sound> _all = [];
     private List<Sound> _filtered = [];
@@ -184,9 +242,35 @@
         _loading = false;
     }
 
+    private async Task ReloadFavoritesAsync()
+    {
+        _favorites = await Favorites.GetForUserAsync(_userId);
+        _favoriteIds = await Favorites.GetFavoritedSoundIdsAsync(_userId);
+    }
+
+    private async Task ToggleFavorite(Sound sound)
+    {
+        var result = await Favorites.ToggleAsync(_userId, sound.Id);
+
+        if (!result.IsFavorited && !string.IsNullOrEmpty(result.Error))
+        {
+            Snackbar.Add(result.Error, Severity.Warning);
+            return;
+        }
+
+        await ReloadFavoritesAsync();
+    }
+
+    private async Task Move(Guid soundId, bool up)
+    {
+        await Favorites.MoveAsync(_userId, soundId, up);
+        await ReloadFavoritesAsync();
+    }
+
     private async Task ReloadAsync()
     {
         _all = await Library.GetAllAsync();
+        await ReloadFavoritesAsync();
         _allTags = [.. _all.SelectMany(s => s.TagList).Distinct().OrderBy(t => t)];
         ApplyFilter();
 
@@ -291,6 +375,8 @@
     {
         _all = await Library.GetAllAsync();
         _allTags = [.. _all.SelectMany(s => s.TagList).Distinct().OrderBy(t => t)];
+        // A sound someone else deleted cascades out of favourites, so reload them too.
+        await ReloadFavoritesAsync();
         ApplyFilter();
         StateHasChanged();
     });
@@ -310,18 +396,26 @@
         }
     }
 
-    /// <summary>Fires the tile whose hotkey badge matches the pressed key.</summary>
+    /// <summary>
+    /// Plays the favourite in the pressed slot. Looking up by slot rather than by position
+    /// in the grid is the point: the key means one sound, and searching or filtering no
+    /// longer silently changes what it does.
+    /// </summary>
     [JSInvokable]
     public async Task OnHotkey(string key)
     {
-        var index = Array.IndexOf(HotkeyOrder, key.Length == 1 ? key[0] : '\0');
-
-        if (index < 0 || index >= _filtered.Count || !_canPlay)
+        if (!_canPlay || key.Length != 1 || !int.TryParse(key, out var slot))
         {
             return;
         }
 
-        await Play(_filtered[index]);
+        var favorite = _favorites.FirstOrDefault(f => f.Slot == slot);
+        if (favorite?.Sound is null)
+        {
+            return;
+        }
+
+        await Play(favorite.Sound);
         StateHasChanged();
     }
 
