@@ -22,6 +22,9 @@ clips into it. Sounds overlap the way the real soundboard does, and everything i
 | Upload limit | 5 seconds (0.25s tolerance for encoder padding), 10 MB |
 | Loudness | Normalized at upload, so no clip is ten times louder than the rest |
 | Emoji | Every sound carries one — your server's custom emoji or any standard one — and search matches it, including a custom emoji's name |
+| Favourites | Each person stars up to 9 sounds and plays them with keys 1–9 |
+| Leaving | The bot drops out a few seconds after the last human leaves the channel |
+| Log | Sounds played, plus who summoned the bot and when it left |
 
 Uploads are converted once at upload into raw 48 kHz stereo PCM plus a normalized mp3
 preview. Playback then never spawns a process — it reads ~1 MB off disk and mixes it.
@@ -108,7 +111,7 @@ the container — `Soundboard__MaxDurationSeconds` is the same knob as the neste
 | `Soundboard__MaxDurationSeconds` | `5` | Upload length limit |
 | `Soundboard__MaxUploadBytes` | `10485760` | Upload size limit |
 | `Soundboard__PerUserCooldownSeconds` | `0` | Anti-spam delay between plays, per user |
-| `Soundboard__IdleLeaveMinutes` | `10` | Auto-disconnect after the channel empties |
+| `Soundboard__IdleLeaveSeconds` | `5` | Auto-disconnect this long after the last human leaves |
 
 ## Layout
 

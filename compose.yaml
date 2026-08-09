@@ -12,7 +12,8 @@ services:
       Soundboard__MaxUploadBytes: "10485760"
       # Anti-spam valve. 0 disables it; raise if someone abuses the airhorn.
       Soundboard__PerUserCooldownSeconds: "0"
-      Soundboard__IdleLeaveMinutes: "10"
+      # Drop out this many seconds after the last human leaves the channel. 0 disables.
+      Soundboard__IdleLeaveSeconds: "5"
     volumes:
       # Uploaded sounds and the SQLite database. Without this, everything is lost
       # on the next container rebuild.

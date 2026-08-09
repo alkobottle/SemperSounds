@@ -43,9 +43,12 @@ public sealed class SoundboardOptions
     [Range(0, 3600)]
     public int PerUserCooldownSeconds { get; set; }
 
-    /// <summary>Disconnect the bot after this long with nobody else in the channel. 0 disables.</summary>
-    [Range(0, 1440)]
-    public int IdleLeaveMinutes { get; set; } = 10;
+    /// <summary>
+    /// Disconnect the bot after this many seconds with no humans left in the channel.
+    /// 0 disables automatic leaving.
+    /// </summary>
+    [Range(0, 86400)]
+    public int IdleLeaveSeconds { get; set; } = 5;
 
     /// <summary>ffmpeg executable. Bare name resolves via PATH, which is how the container finds it.</summary>
     public string FfmpegPath { get; set; } = "ffmpeg";

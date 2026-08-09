@@ -3,6 +3,7 @@
 @implements IDisposable
 @inject SoundLibrary Library
 @inject FavoriteLibrary Favorites
+@inject ActivityLog Activity
 @inject PlaybackService Playback
 @inject SoundboardEvents Events
 @inject ISnackbar Snackbar
@@ -193,22 +194,23 @@
 
     <MudItem xs="12" md="3">
         <MudPaper Class="pa-4" Elevation="2">
-            <MudText Typo="Typo.subtitle1" Class="mb-2">Recent plays</MudText>
+            <MudText Typo="Typo.subtitle1" Class="mb-2">Recent activity</MudText>
             @if (_recent.Count == 0)
             {
-                <MudText Typo="Typo.body2" Class="mud-text-secondary">Nothing played yet.</MudText>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">Nothing yet.</MudText>
             }
             else
             {
                 <MudList T="string" Dense="true">
-                    @foreach (var play in _recent)
+                    @foreach (var entry in _recent)
                     {
                         <MudListItem T="string">
-                            <MudText Typo="Typo.body2" Class="d-flex align-center" Style="gap: 6px;">
-                                <UserAvatar UserId="@play.UserId" FallbackName="@play.UserName" Pixels="18" />
-                                <span>played @play.SoundName</span>
+                            <MudText Typo="Typo.body2">
+                                <ActivityLine Entry="@entry" />
                             </MudText>
-                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@play.PlayedAt.ToLocalTime().ToString("HH:mm:ss")</MudText>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                @entry.OccurredAt.ToLocalTime().ToString("HH:mm:ss")
+                            </MudText>
                         </MudListItem>
                     }
                 </MudList>
@@ -229,7 +231,7 @@
     private List<Sound> _filtered = [];
     private List<string> _allTags = [];
     private IReadOnlyCollection<string> _selectedTags = [];
-    private readonly List<SoundPlayedNotification> _recent = [];
+    private List<ActivityLogEntry> _recent = [];
 
     private string _search = string.Empty;
     private bool _loading = true;
@@ -246,7 +248,7 @@
 
         Events.SoundPlayed += OnSoundPlayed;
         Events.LibraryChanged += OnLibraryChanged;
-        Events.ConnectionChanged += OnConnectionChanged;
+        Events.ConnectionChanged += OnConnectionActivity;
         Events.VoiceStateChanged += OnConnectionChanged;
         Events.PlaybackChanged += OnPlaybackChanged;
 
@@ -287,11 +289,7 @@
         _allTags = [.. _all.SelectMany(s => s.TagList).Distinct().OrderBy(t => t)];
         ApplyFilter();
 
-        foreach (var entry in await Library.GetRecentPlaysAsync(15))
-        {
-            _recent.Add(new SoundPlayedNotification(
-                entry.SoundId, entry.SoundName, entry.UserId, entry.UserName, entry.PlayedAt));
-        }
+        _recent = await Activity.GetRecentAsync(15);
     }
 
     private void ApplyFilter()
@@ -374,13 +372,11 @@
         }
     }
 
-    private void OnSoundPlayed(SoundPlayedNotification notification) => InvokeAsync(() =>
+    private void OnSoundPlayed(SoundPlayedNotification notification) => InvokeAsync(async () =>
     {
-        _recent.Insert(0, notification);
-        if (_recent.Count > 15)
-        {
-            _recent.RemoveAt(_recent.Count - 1);
-        }
+        // Re-read rather than splicing the notification in, so plays, joins and leaves all
+        // arrive through one path and stay in true chronological order.
+        _recent = await Activity.GetRecentAsync(15);
         StateHasChanged();
     });
 
@@ -404,6 +400,14 @@
     private void OnPlaybackChanged() => InvokeAsync(() =>
     {
         _playingIds = Playback.PlayingSoundIds;
+        StateHasChanged();
+    });
+
+    private void OnConnectionActivity() => InvokeAsync(async () =>
+    {
+        // Joins and leaves belong in the same list as plays.
+        _recent = await Activity.GetRecentAsync(15);
+        UpdateCanPlay();
         StateHasChanged();
     });
 
@@ -447,7 +451,7 @@
     {
         Events.SoundPlayed -= OnSoundPlayed;
         Events.LibraryChanged -= OnLibraryChanged;
-        Events.ConnectionChanged -= OnConnectionChanged;
+        Events.ConnectionChanged -= OnConnectionActivity;
         Events.VoiceStateChanged -= OnConnectionChanged;
         Events.PlaybackChanged -= OnPlaybackChanged;
         _hotkeyRef?.Dispose();

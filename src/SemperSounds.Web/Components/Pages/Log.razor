@@ -1,45 +1,52 @@
 @page "/log"
 @attribute [Authorize]
 @implements IDisposable
-@inject SoundLibrary Library
+@inject ActivityLog Activity
 @inject SoundboardEvents Events
 
 <PageTitle>Log · SemperSounds</PageTitle>
 
-<MudText Typo="Typo.h5" GutterBottom="true">Play log</MudText>
+<MudText Typo="Typo.h5" GutterBottom="true">Activity</MudText>
 
 <MudTable Items="_entries" Dense="true" Hover="true" Striped="true" Elevation="2">
     <HeaderContent>
         <MudTh>When</MudTh>
-        <MudTh>Who</MudTh>
-        <MudTh>Sound</MudTh>
+        <MudTh>What</MudTh>
     </HeaderContent>
     <RowTemplate>
-        <MudTd DataLabel="When">@context.PlayedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</MudTd>
-        <MudTd DataLabel="Who">
-            <UserAvatar UserId="@context.UserId" FallbackName="@context.UserName" Pixels="20" />
+        <MudTd DataLabel="When" Style="white-space: nowrap;">
+            @context.OccurredAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")
         </MudTd>
-        <MudTd DataLabel="Sound">@context.SoundName</MudTd>
+        <MudTd DataLabel="What">
+            <ActivityLine Entry="@context" AvatarPixels="20" />
+        </MudTd>
     </RowTemplate>
     <NoRecordsContent>
-        <MudText Typo="Typo.body2">Nothing has been played yet.</MudText>
+        <MudText Typo="Typo.body2">Nothing has happened yet.</MudText>
     </NoRecordsContent>
 </MudTable>
 
 @code {
-    private List<PlayLogEntry> _entries = [];
+    private List<ActivityLogEntry> _entries = [];
 
     protected override async Task OnInitializedAsync()
     {
-        Events.SoundPlayed += OnSoundPlayed;
-        _entries = await Library.GetRecentPlaysAsync(500);
+        Events.SoundPlayed += OnChanged;
+        Events.ConnectionChanged += OnChanged;
+        _entries = await Activity.GetRecentAsync(500);
     }
 
-    private void OnSoundPlayed(SoundPlayedNotification notification) => InvokeAsync(async () =>
+    private void OnChanged() => InvokeAsync(async () =>
     {
-        _entries = await Library.GetRecentPlaysAsync(500);
+        _entries = await Activity.GetRecentAsync(500);
         StateHasChanged();
     });
 
-    public void Dispose() => Events.SoundPlayed -= OnSoundPlayed;
+    private void OnChanged(SoundPlayedNotification _) => OnChanged();
+
+    public void Dispose()
+    {
+        Events.SoundPlayed -= OnChanged;
+        Events.ConnectionChanged -= OnChanged;
+    }
 }

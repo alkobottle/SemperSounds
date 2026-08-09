@@ -161,28 +161,6 @@ public sealed class SoundLibrary(
             : null;
     }
 
-    public async Task LogPlayAsync(
-        Sound sound, ulong userId, string userName, ulong channelId,
-        CancellationToken cancellationToken = default)
-    {
-        db.PlayLog.Add(new PlayLogEntry
-        {
-            SoundId = sound.Id,
-            SoundName = sound.Name,
-            UserId = userId,
-            UserName = userName,
-            ChannelId = channelId,
-        });
-
-        await db.SaveChangesAsync(cancellationToken);
-    }
-
-    public Task<List<PlayLogEntry>> GetRecentPlaysAsync(int count, CancellationToken cancellationToken = default) =>
-        db.PlayLog.AsNoTracking()
-            .OrderByDescending(e => e.PlayedAt)
-            .Take(count)
-            .ToListAsync(cancellationToken);
-
     /// <summary>
     /// Every tag in use with how many sounds carry it, most-used first.
     /// Ordering by popularity is what nudges people onto the established tag instead of

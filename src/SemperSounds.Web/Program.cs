@@ -50,6 +50,7 @@ builder.Services.AddScoped<IAudioTranscoder, FfmpegAudioTranscoder>();
 builder.Services.AddScoped<UploadValidator>();
 builder.Services.AddScoped<SoundLibrary>();
 builder.Services.AddScoped<FavoriteLibrary>();
+builder.Services.AddScoped<ActivityLog>();
 
 // Discord side. All singletons: one gateway connection and one voice connection
 // serve every browser session.

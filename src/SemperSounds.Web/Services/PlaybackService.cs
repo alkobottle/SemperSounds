@@ -37,8 +37,11 @@ public sealed class PlaybackService(
     private Stream? _audioStream;
     private CancellationTokenSource? _pumpCancellation;
     private Task? _pumpTask;
-    private DateTimeOffset _emptySince = DateTimeOffset.MaxValue;
     private IReadOnlySet<Guid> _playing = new HashSet<Guid>();
+
+    /// <summary>Drops the bot out once nobody is left to hear it.</summary>
+    private readonly IdleTimer _idleTimer =
+        new(TimeSpan.FromSeconds(soundboardOptions.Value.IdleLeaveSeconds));
 
     /// <summary>
     /// How long to stay in the speaking state after the last audio ends. Rapid-fire
@@ -63,7 +66,8 @@ public sealed class PlaybackService(
     /// <summary>
     /// Connects the bot to whichever voice channel the requesting user is sitting in.
     /// </summary>
-    public async Task<PlaybackResult> JoinAsync(ulong userId, CancellationToken cancellationToken = default)
+    public async Task<PlaybackResult> JoinAsync(
+        ulong userId, string userName = "", CancellationToken cancellationToken = default)
     {
         if (!bot.IsReady)
         {
@@ -107,12 +111,15 @@ public sealed class PlaybackService(
 
             _voiceClient = voiceClient;
             ConnectedChannelId = channelId;
-            _emptySince = DateTimeOffset.MaxValue;
+            _idleTimer.Reset();
 
             _pumpCancellation = new CancellationTokenSource();
             _pumpTask = Task.Run(() => PumpAsync(_pumpCancellation.Token), CancellationToken.None);
 
             logger.LogInformation("Joined voice channel {ChannelId}", channelId);
+            await LogActivityAsync(
+                log => log.LogJoinAsync(userId, userName, channelId, voiceStates.GetChannelName(channelId)));
+
             events.RaiseConnectionChanged();
             return PlaybackResult.Ok;
         }
@@ -128,8 +135,13 @@ public sealed class PlaybackService(
         }
     }
 
-    public async Task LeaveAsync()
+    /// <param name="userId">Null when the bot is leaving on its own because nobody remained.</param>
+    public async Task LeaveAsync(ulong? userId = null, string? userName = null)
     {
+        // Captured before disconnecting, which clears them.
+        var channelId = ConnectedChannelId;
+        var channelName = ConnectedChannelName;
+
         await _connectionGate.WaitAsync();
         try
         {
@@ -138,6 +150,11 @@ public sealed class PlaybackService(
         finally
         {
             _connectionGate.Release();
+        }
+
+        if (channelId is { } id)
+        {
+            await LogActivityAsync(log => log.LogLeaveAsync(userId, userName, id, channelName));
         }
 
         events.RaiseConnectionChanged();
@@ -184,7 +201,8 @@ public sealed class PlaybackService(
         _mixer.Add(pcm, sound.Id);
         _lastPlayed[userId] = DateTimeOffset.UtcNow;
 
-        await library.LogPlayAsync(sound, userId, userName, channelId, cancellationToken);
+        await scope.ServiceProvider.GetRequiredService<ActivityLog>()
+            .LogPlayAsync(sound, userId, userName, channelId, ConnectedChannelName, cancellationToken);
 
         events.RaiseSoundPlayed(new SoundPlayedNotification(
             sound.Id, sound.Name, userId, userName, DateTimeOffset.UtcNow));
@@ -255,7 +273,8 @@ public sealed class PlaybackService(
                     idleCheck = DateTimeOffset.UtcNow;
                     if (ShouldLeaveIdleChannel())
                     {
-                        _ = Task.Run(LeaveAsync, CancellationToken.None);
+                        // No user: this is the bot dropping out on its own.
+                        _ = Task.Run(() => LeaveAsync(), CancellationToken.None);
                         return;
                     }
                 }
@@ -268,7 +287,7 @@ public sealed class PlaybackService(
         catch (Exception ex)
         {
             logger.LogError(ex, "Voice pump stopped unexpectedly");
-            _ = Task.Run(LeaveAsync, CancellationToken.None);
+            _ = Task.Run(() => LeaveAsync(), CancellationToken.None);
         }
     }
 
@@ -316,27 +335,27 @@ public sealed class PlaybackService(
         }
     }
 
-    private bool ShouldLeaveIdleChannel()
+    /// <summary>
+    /// Runs a log write in its own scope. This service is a singleton and the log is
+    /// scoped, so it cannot be injected directly without capturing a disposed context.
+    /// A failed write must not take the voice connection down with it.
+    /// </summary>
+    private async Task LogActivityAsync(Func<ActivityLog, Task> write)
     {
-        if (_options.IdleLeaveMinutes <= 0 || ConnectedChannelId is not { } channelId)
+        try
         {
-            return false;
+            using var scope = scopeFactory.CreateScope();
+            await write(scope.ServiceProvider.GetRequiredService<ActivityLog>());
         }
-
-        if (voiceStates.CountHumansIn(channelId) > 0)
+        catch (Exception ex)
         {
-            _emptySince = DateTimeOffset.MaxValue;
-            return false;
+            logger.LogWarning(ex, "Could not write to the activity log");
         }
-
-        if (_emptySince == DateTimeOffset.MaxValue)
-        {
-            _emptySince = DateTimeOffset.UtcNow;
-            return false;
-        }
-
-        return DateTimeOffset.UtcNow - _emptySince >= TimeSpan.FromMinutes(_options.IdleLeaveMinutes);
     }
+
+    private bool ShouldLeaveIdleChannel() =>
+        ConnectedChannelId is { } channelId &&
+        _idleTimer.ShouldLeave(anyoneListening: voiceStates.CountHumansIn(channelId) > 0);
 
     /// <summary>Tears down the connection. Callers must already hold <see cref="_connectionGate"/>.</summary>
     private async Task DisconnectCoreAsync()
@@ -398,7 +417,7 @@ public sealed class PlaybackService(
         }
 
         ConnectedChannelId = null;
-        _emptySince = DateTimeOffset.MaxValue;
+        _idleTimer.Reset();
     }
 
     public async ValueTask DisposeAsync()

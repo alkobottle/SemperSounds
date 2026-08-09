@@ -245,11 +245,12 @@ public sealed class SoundLibraryTests : IDisposable
         var added = await library.AddAsync(Upload(), "beep.mp3", "Beep", "", 42, "alkobot");
         var sound = added.Sound!;
 
-        await library.LogPlayAsync(sound, userId: 1, userName: "first", channelId: 99);
+        var log = new ActivityLog(_db);
+        await log.LogPlayAsync(sound, userId: 1, userName: "first", channelId: 99, channelName: "VAL");
         await Task.Delay(10);
-        await library.LogPlayAsync(sound, userId: 2, userName: "second", channelId: 99);
+        await log.LogPlayAsync(sound, userId: 2, userName: "second", channelId: 99, channelName: "VAL");
 
-        var recent = await library.GetRecentPlaysAsync(10);
+        var recent = await log.GetRecentAsync(10);
 
         Assert.Equal(2, recent.Count);
         Assert.Equal("second", recent[0].UserName);
@@ -275,10 +276,11 @@ public sealed class SoundLibraryTests : IDisposable
         var added = await library.AddAsync(Upload(), "beep.mp3", "Beep", "", 42, "alkobot");
         var sound = added.Sound!;
 
-        await library.LogPlayAsync(sound, userId: 7, userName: "mace", channelId: 99);
+        var log = new ActivityLog(_db);
+        await log.LogPlayAsync(sound, userId: 7, userName: "mace", channelId: 99, channelName: "VAL");
         await library.DeleteAsync(sound.Id);
 
-        var entry = Assert.Single(await _db.PlayLog.ToListAsync());
+        var entry = Assert.Single(await _db.ActivityLog.ToListAsync());
         Assert.Equal("Beep", entry.SoundName);
         Assert.Equal(7ul, entry.UserId);
         Assert.Equal("mace", entry.UserName);

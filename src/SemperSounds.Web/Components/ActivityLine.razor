@@ -1,0 +1,43 @@
+@* One activity line, so the log page and the home panel describe events identically. *@
+
+<span class="d-inline-flex align-center flex-wrap" style="gap: 6px; min-width: 0;">
+    <MudIcon Icon="@Icon" Size="Size.Small" Color="@Colour" />
+
+    @if (Entry.UserId is { } userId)
+    {
+        <UserAvatar UserId="@userId" FallbackName="@Entry.UserName" Pixels="@AvatarPixels" />
+    }
+
+    <span>@Description</span>
+</span>
+
+@code {
+    [Parameter, EditorRequired] public ActivityLogEntry Entry { get; set; } = default!;
+
+    [Parameter] public int AvatarPixels { get; set; } = 18;
+
+    private string Icon => Entry.Kind switch
+    {
+        SoundboardActivity.Played => Icons.Material.Filled.MusicNote,
+        SoundboardActivity.Joined => Icons.Material.Filled.Login,
+        _ => Icons.Material.Filled.Logout,
+    };
+
+    private Color Colour => Entry.Kind switch
+    {
+        SoundboardActivity.Played => Color.Primary,
+        SoundboardActivity.Joined => Color.Success,
+        _ => Color.Default,
+    };
+
+    private string Description => Entry.Kind switch
+    {
+        SoundboardActivity.Played => $"played {Entry.SoundName}",
+        SoundboardActivity.Joined => $"summoned the bot to {ChannelName}",
+        // No user means nobody was left to hear it, so say why rather than just "left".
+        _ when Entry.IsAutomatic => $"Bot left {ChannelName} — nobody remained",
+        _ => $"sent the bot away from {ChannelName}",
+    };
+
+    private string ChannelName => string.IsNullOrWhiteSpace(Entry.ChannelName) ? "voice" : Entry.ChannelName;
+}

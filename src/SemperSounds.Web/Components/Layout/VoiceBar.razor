@@ -90,7 +90,8 @@ else
         try
         {
             var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
-            var result = await Playback.JoinAsync(state.User.GetDiscordUserId());
+            var result = await Playback.JoinAsync(
+                state.User.GetDiscordUserId(), state.User.GetDisplayName());
 
             if (!result.IsSuccess)
             {
@@ -106,7 +107,8 @@ else
 
     private async Task Leave()
     {
-        await Playback.LeaveAsync();
+        var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        await Playback.LeaveAsync(state.User.GetDiscordUserId(), state.User.GetDisplayName());
         RefreshMembers();
     }
 
