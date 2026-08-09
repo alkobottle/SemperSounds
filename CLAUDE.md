@@ -31,6 +31,10 @@ Migrations apply automatically at startup (`db.Database.MigrateAsync()` in `Prog
 `src/SemperSounds.Web/appsettings.Development.example.json` to
 `appsettings.Development.json` (gitignored) and fill it in.
 
+**The Server Members privileged intent must be enabled in the developer portal**, or
+avatars, nicknames and idle auto-leave all break silently — see the guild member cache
+section below.
+
 **ffmpeg and ffprobe must be on PATH** for uploads to work locally; the container installs
 them. Unit tests stub the `IAudioProbe`/`IAudioTranscoder` boundary, so they pass without it.
 
@@ -63,6 +67,50 @@ any Dockerfile change with:
 ```bash
 docker run --rm --entrypoint /bin/sh sempersounds:latest -c "ls wwwroot/_framework/"
 ```
+
+### The guild member cache needs an intent *and* an explicit request
+
+`Guild.Users` is filled only from the `members` array of `GUILD_CREATE`, and two separate
+things keep it empty:
+
+1. Without the privileged `GuildUsers` intent — which must be enabled both in
+   `DiscordBotService` and in the portal — Discord sends only the bot's own member.
+2. Above Discord's `large_threshold` (default **50**) it omits members regardless. This
+   guild has 51, so `GUILD_CREATE` arrived with 2 users.
+
+`DiscordBotService` therefore calls `RequestGuildUsersAsync` on `GuildCreate` and lets the
+`GuildUserChunk` handler fill the cache. Do not "fix" a future recurrence by raising
+`LargeThreshold`; that only postpones the same silent failure to 250 members.
+
+This failed *silently* in two places at once: avatars fell back to initials, and
+`CountHumansIn` — which excluded bots via `Users.TryGetValue(...) && IsBot` — counted the
+bot as a listener, so idle auto-leave never fired. Bot exclusion is now by
+`bot.Client.Cache.User.Id`, which needs no intent, so that path survives the intent being
+revoked.
+
+### ffmpeg trim options must precede -i
+
+`FfmpegAudioTranscoder` writes **two** outputs (PCM and mp3 preview). Options placed after
+`-i` are *output* options binding only to the **next** output, so `-t` there trimmed the
+PCM and left the preview running to the end of the source — a 10s source seeking 2s and
+keeping 3s produced a 3.00s PCM and an 8.04s mp3. Both `-ss` and `-t` belong before `-i`,
+where they are input options. `FfmpegArgumentTests` pins the ordering.
+
+### Discord's speaking ring follows packet flow, not the flag
+
+Lowering the speaking flag does not clear the green ring if frames keep being sent. The
+pump therefore writes **nothing at all** while idle, and opens a fresh stream per speaking
+burst — NetCord's voice stream normalizes speed against a clock, so resuming a long-idle
+stream risks it rushing frames to catch up. `EnterSpeakingStateAsync` must still be called
+on join: it readies the connection, and without it the first `SendVoiceAsync` throws
+"Connection not started".
+
+### There is no Bootstrap
+
+It was removed during scaffolding, so `text-truncate`, `text-center` and friends are
+**no-ops** — they silently do nothing rather than erroring, which left titles wrapping and
+tiles at mismatched heights. `wwwroot/app.css` defines `ss-truncate` and `ss-clamp-2`;
+check a class exists in either MudBlazor's CSS or `app.css` before using it.
 
 ### Verifying third-party API shape
 
@@ -124,8 +172,10 @@ membership of `Discord__GuildId` (checked in `OnCreatingTicket`, which calls `co
 so a non-member never receives a cookie); playing requires being in the bot's *current*
 channel; uploading and deleting are open to any signed-in member, deliberately.
 
-`PlayLogEntry` denormalizes `SoundName` and holds **no foreign key** to `Sound`, because
-anyone can delete sounds and the history must survive it.
+`ActivityLogEntry` denormalizes `SoundName` and holds **no foreign key** to `Sound`,
+because anyone can delete sounds and the history must survive it. `Favorite` deliberately
+does the opposite — a real foreign key with cascade delete — since a favourite pointing at
+a deleted sound is only a dangling shortcut.
 
 ### Blazor and MudBlazor specifics
 

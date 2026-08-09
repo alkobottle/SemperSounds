@@ -19,8 +19,10 @@ clips into it. Sounds overlap the way the real soundboard does, and everything i
 | Who may play | Only people currently in the bot's voice channel |
 | Who may upload/delete | Anyone in the server |
 | Overlapping sounds | They mix, like the real soundboard. **Stop all** silences everything |
-| Upload limit | 5 seconds (0.25s tolerance for encoder padding), 10 MB |
+| Upload limit | 5 seconds of kept audio (0.25s tolerance for encoder padding), 10 MB |
+| Longer files | Fine — trim them in the browser on a waveform before uploading. Sources up to 5 minutes |
 | Loudness | Normalized at upload, so no clip is ten times louder than the rest |
+| Finding things | Live search over names, tags and emoji, plus tag filters. Tags autocomplete against those already in use, so near-duplicates do not pile up |
 | Emoji | Every sound carries one — your server's custom emoji or any standard one — and search matches it, including a custom emoji's name |
 | Favourites | Each person stars up to 9 sounds and plays them with keys 1–9 |
 | Leaving | The bot drops out a few seconds after the last human leaves the channel |
@@ -38,12 +40,14 @@ At <https://discord.com/developers/applications>:
 3. **OAuth2** → copy Client ID and Client Secret.
 4. **OAuth2 → Redirects** → add `https://your-domain/signin-discord`
    (and `http://localhost:5219/signin-discord` for local development).
-5. **Invite the bot** with the `bot` scope and the **Connect** and **Speak** permissions.
-6. In Discord, enable Developer Mode, right-click your server → **Copy Server ID** →
+5. **Bot → Privileged Gateway Intents → enable Server Members Intent.** Self-enablable
+   below 100 servers, no review needed. **Do not skip this**: without it Discord sends an
+   effectively empty member list, so avatars and nicknames never resolve and the bot
+   counts itself as a listener, meaning it never auto-disconnects from an empty channel.
+   Presence and Message Content stay off.
+6. **Invite the bot** with the `bot` scope and the **Connect** and **Speak** permissions.
+7. In Discord, enable Developer Mode, right-click your server → **Copy Server ID** →
    this is `Discord__GuildId`.
-
-No privileged intents are needed. The bot uses Guilds and Guild Voice States, both of
-which are on by default.
 
 ## Running with Docker
 
@@ -55,8 +59,9 @@ docker compose up -d --build
 The container listens on `127.0.0.1:8080` and expects a reverse proxy in front of it to
 terminate TLS. Point your proxy at it and make sure it sets `X-Forwarded-Proto`.
 
-Sounds and the database live in `./data`, mounted at `/data`. **Back this up** — deleting
-it deletes every uploaded sound.
+Sounds, the database and the Data Protection keys live in `./data`, mounted at `/data`.
+**Back this up** — deleting it deletes every uploaded sound, and discarding the keys signs
+everyone out.
 
 ### Behind the proxy
 
@@ -147,18 +152,26 @@ the container — `Soundboard__MaxDurationSeconds` is the same knob as the neste
 | `Discord__GuildId` | — | The one server this instance serves (required) |
 | `App__PublicBaseUrl` | empty | Public https URL; required behind a proxy |
 | `Soundboard__DataPath` | `/data` | Where sounds and the database live |
-| `Soundboard__MaxDurationSeconds` | `5` | Upload length limit |
+| `Soundboard__MaxDurationSeconds` | `5` | Length limit on the audio that is *kept* |
+| `Soundboard__MaxSourceDurationSeconds` | `300` | Longest file accepted for trimming |
 | `Soundboard__MaxUploadBytes` | `10485760` | Upload size limit |
 | `Soundboard__PerUserCooldownSeconds` | `0` | Anti-spam delay between plays, per user |
-| `Soundboard__IdleLeaveSeconds` | `5` | Auto-disconnect this long after the last human leaves |
+| `Soundboard__IdleLeaveSeconds` | `5` | Auto-disconnect this long after the last human leaves. `0` disables |
+| `Soundboard__DurationToleranceSeconds` | `0.25` | Slack on the length limit; encoders pad, so a clip authored at 5.00s often probes at 5.02s |
+| `Soundboard__FfmpegPath` / `Soundboard__FfprobePath` | `ffmpeg` / `ffprobe` | Override if they are not on `PATH` |
+| `Soundboard__TranscodeTimeoutSeconds` | `60` | Kills a stuck ffmpeg run |
 
 ## Layout
 
 ```
-src/SemperSounds.Core/    Domain: PcmMixer, upload validation, ffmpeg wrappers, EF model
-src/SemperSounds.Web/     Blazor UI, Discord gateway + voice, auth
-tests/SemperSounds.Tests/ Unit tests
+src/SemperSounds.Core/     Domain: PcmMixer, upload validation, ffmpeg wrappers, EF model
+src/SemperSounds.Web/      Blazor UI, Discord gateway + voice, auth
+tools/SemperSounds.Import/ Bulk importer, published into the same image
+tests/SemperSounds.Tests/  Unit tests
 ```
+
+`/` is a public landing page carrying the link-preview card; the board itself is `/board`
+and requires sign-in.
 
 The mixer and upload validator live in `Core` specifically so they can be tested without
 a Discord connection or a browser.
