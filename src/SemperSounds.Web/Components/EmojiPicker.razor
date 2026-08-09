@@ -1,11 +1,20 @@
 @using SemperSounds.Core.Sounds
 @inject GuildEmojiProvider GuildEmojis
 
-<MudMenu ActivationEvent="MouseEvent.LeftClick" AnchorOrigin="Origin.BottomLeft" TransformOrigin="Origin.TopLeft">
+@* Open state is managed here rather than left to MudMenu. With custom ActivatorContent
+   MudMenu attaches no click handler of its own — the activator has to trigger it — and
+   owning the state also lets the menu close as soon as an emoji is chosen. *@
+<MudMenu Open="_open"
+         OpenChanged="@(value => _open = value)"
+         AnchorOrigin="Origin.BottomLeft"
+         TransformOrigin="Origin.TopLeft">
     <ActivatorContent>
-        <MudButton Variant="Variant.Outlined" Class="pa-2" Style="min-width: 64px;">
+        <MudButton Variant="Variant.Outlined"
+                   Class="pa-2"
+                   Style="min-width: 56px;"
+                   aria-label="Choose an emoji"
+                   OnClick="@(() => _open = !_open)">
             <SoundEmojiView Value="@Value" Size="28" />
-            <MudIcon Icon="@Icons.Material.Filled.ArrowDropDown" Size="Size.Small" />
         </MudButton>
     </ActivatorContent>
     <ChildContent>
@@ -77,12 +86,14 @@
     private IReadOnlyList<GuildEmoji> _guildEmojis = [];
     private string _pasted = string.Empty;
     private bool _pasteError;
+    private bool _open;
 
     protected override void OnInitialized() => _guildEmojis = GuildEmojis.GetAll();
 
     private async Task Select(string raw)
     {
         _pasteError = false;
+        _open = false;
         await ValueChanged.InvokeAsync(raw);
     }
 
@@ -96,9 +107,8 @@
 
         if (SoundEmoji.TryParse(_pasted, out var emoji))
         {
-            _pasteError = false;
             _pasted = string.Empty;
-            await ValueChanged.InvokeAsync(emoji.Raw);
+            await Select(emoji.Raw);
         }
         else
         {
