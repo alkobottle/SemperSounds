@@ -1,0 +1,136 @@
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+<MudPaper Class="pa-3" Outlined="true">
+    <div class="d-flex align-center justify-space-between mb-2">
+        <MudText Typo="Typo.subtitle2">Trim</MudText>
+        @if (_loaded)
+        {
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                source @Format(_duration)s → keeping <b>@Format(SelectedLength)s</b>
+            </MudText>
+        }
+    </div>
+
+    @if (_error is not null)
+    {
+        <MudAlert Severity="Severity.Warning" Dense="true" Variant="Variant.Outlined" Class="mb-2">
+            @_error The file can still be uploaded if it is already short enough.
+        </MudAlert>
+    }
+
+    <canvas @ref="_canvas"
+            style="width: 100%; height: 110px; display: block; cursor: ew-resize; touch-action: none;"></canvas>
+
+    @if (_loaded)
+    {
+        <div class="d-flex align-center gap-3 mt-2 flex-wrap">
+            <MudButton Size="Size.Small"
+                       Variant="Variant.Filled"
+                       StartIcon="@Icons.Material.Filled.PlayArrow"
+                       OnClick="Preview">
+                Preview
+            </MudButton>
+            <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="Stop">Stop</MudButton>
+
+            <MudSpacer />
+
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                @Format(_start)s – @Format(_end)s
+            </MudText>
+
+            @if (SelectedLength > MaxLengthSeconds + 0.01)
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Error">too long</MudChip>
+            }
+            else
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Success">ok</MudChip>
+            }
+        </div>
+
+        <MudText Typo="Typo.caption" Class="mud-text-secondary mt-1">
+            Drag either handle, or click to move the nearer one. The selection is capped at
+            @Format(MaxLengthSeconds) seconds.
+        </MudText>
+    }
+</MudPaper>
+
+@code {
+    /// <summary>CSS selector for the file input holding the chosen file.</summary>
+    [Parameter, EditorRequired] public string FileInputSelector { get; set; } = default!;
+
+    [Parameter] public double MaxLengthSeconds { get; set; } = 5;
+
+    /// <summary>Raised whenever the window changes, and once after loading.</summary>
+    [Parameter] public EventCallback<(double Start, double Length)> SelectionChanged { get; set; }
+
+    private ElementReference _canvas;
+    private DotNetObjectReference<WaveformTrimmer>? _self;
+    private double _duration;
+    private double _start;
+    private double _end;
+    private bool _loaded;
+    private string? _error;
+
+    public double SelectedLength => Math.Max(0, _end - _start);
+
+    /// <summary>Called by the page once a file has been chosen.</summary>
+    public async Task LoadAsync()
+    {
+        _self ??= DotNetObjectReference.Create(this);
+        _error = null;
+        _loaded = false;
+
+        var result = await JS.InvokeAsync<LoadResult>(
+            "semperTrimmer.load", _canvas, FileInputSelector, _self, MaxLengthSeconds);
+
+        if (!result.Ok)
+        {
+            _error = result.Error;
+            await SelectionChanged.InvokeAsync((0, 0));
+            StateHasChanged();
+            return;
+        }
+
+        _duration = result.Duration;
+        _start = result.Start;
+        _end = result.End;
+        _loaded = true;
+
+        await SelectionChanged.InvokeAsync((_start, SelectedLength));
+        StateHasChanged();
+    }
+
+    [JSInvokable]
+    public async Task OnSelectionChanged(double start, double end)
+    {
+        _start = start;
+        _end = end;
+        await SelectionChanged.InvokeAsync((_start, SelectedLength));
+        StateHasChanged();
+    }
+
+    private async Task Preview() => await JS.InvokeVoidAsync("semperTrimmer.preview");
+
+    private async Task Stop() => await JS.InvokeVoidAsync("semperTrimmer.stop");
+
+    private static string Format(double seconds) =>
+        seconds.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture);
+
+    private sealed record LoadResult(bool Ok, string? Error, double Duration, double Start, double End);
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("semperTrimmer.dispose");
+        }
+        catch (JSDisconnectedException)
+        {
+            // The circuit is already gone; nothing to clean up on the client.
+        }
+
+        _self?.Dispose();
+    }
+}

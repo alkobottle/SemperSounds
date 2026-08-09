@@ -1,5 +1,6 @@
 @page "/upload"
 @attribute [Authorize]
+@using SemperSounds.Core.Sounds
 @inject SoundLibrary Library
 @inject SoundboardEvents Events
 @inject ISnackbar Snackbar
@@ -14,17 +15,27 @@
 <MudPaper Class="pa-6" Elevation="2" Style="max-width: 640px;">
     <MudStack Spacing="4">
         <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
-            Clips must be at most @Options.Value.MaxDurationSeconds.ToString("0.#") seconds.
-            Anything longer is rejected. Volume is levelled automatically on upload.
+            Longer files are fine — trim them down to
+            @Options.Value.MaxDurationSeconds.ToString("0.#") seconds or less below.
+            Volume is levelled automatically on upload.
         </MudAlert>
 
-        <MudFileUpload T="IBrowserFile" FilesChanged="OnFileChanged" Accept=".mp3,.wav,.ogg,.m4a,audio/*" />
+        @* The trimmer reads the chosen file straight out of this input, so the audio is
+           decoded in the browser and never round-trips to the server while scrubbing. *@
+        <div id="sound-file-host">
+            <MudFileUpload T="IBrowserFile" FilesChanged="OnFileChanged" Accept=".mp3,.wav,.ogg,.m4a,audio/*" />
+        </div>
 
         @if (_file is not null)
         {
             <MudText Typo="Typo.body2" Class="mud-text-secondary">
                 Selected: <b>@_file.Name</b> (@((_file.Size / 1024d).ToString("0")) KB)
             </MudText>
+
+            <WaveformTrimmer @ref="_trimmer"
+                             FileInputSelector="#sound-file-host input[type=file]"
+                             MaxLengthSeconds="@Options.Value.MaxDurationSeconds"
+                             SelectionChanged="OnTrimChanged" />
         }
 
         <div class="d-flex align-center gap-4">
@@ -66,15 +77,42 @@
     private string _error = string.Empty;
     private bool _uploading;
 
+    private WaveformTrimmer? _trimmer;
+    private TrimRequest? _trim;
+    private bool _loadTrimmerOnRender;
+
     private void OnFileChanged(IBrowserFile? file)
     {
         _file = file;
         _error = string.Empty;
+        _trim = null;
 
         if (file is not null && string.IsNullOrWhiteSpace(_name))
         {
             _name = Path.GetFileNameWithoutExtension(file.Name);
         }
+
+        // The trimmer only exists once this render completes, so loading waits for it.
+        _loadTrimmerOnRender = file is not null;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_loadTrimmerOnRender && _trimmer is not null)
+        {
+            _loadTrimmerOnRender = false;
+            await _trimmer.LoadAsync();
+        }
+    }
+
+    private void OnTrimChanged((double Start, double Length) selection)
+    {
+        // A zero length means the browser could not decode the file for a waveform. The
+        // upload still goes ahead untrimmed, and the server decides whether it is short
+        // enough, so a browser that cannot decode an exotic format is not a dead end.
+        _trim = selection.Length > 0
+            ? new TrimRequest(selection.Start, selection.Length)
+            : null;
     }
 
     private async Task Submit()
@@ -102,7 +140,8 @@
                 _tags,
                 state.User.GetDiscordUserId(),
                 state.User.GetDisplayName(),
-                _emoji);
+                _emoji,
+                _trim);
 
             if (!result.IsSuccess)
             {

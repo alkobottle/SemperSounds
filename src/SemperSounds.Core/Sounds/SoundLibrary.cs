@@ -37,6 +37,7 @@ public sealed class SoundLibrary(
         ulong uploaderId,
         string uploaderName,
         string emoji = "",
+        TrimRequest? trim = null,
         CancellationToken cancellationToken = default)
     {
         Directory.CreateDirectory(_options.SoundsPath);
@@ -70,7 +71,7 @@ public sealed class SoundLibrary(
                 sizeBytes = file.Length;
             }
 
-            var validation = await validator.ValidateAsync(tempPath, sizeBytes, cancellationToken);
+            var validation = await validator.ValidateAsync(tempPath, sizeBytes, trim, cancellationToken);
             if (!validation.IsValid)
             {
                 return SoundUploadResult.Failure(validation.Error);
@@ -78,7 +79,11 @@ public sealed class SoundLibrary(
 
             sound.DurationMs = validation.DurationMs;
 
-            await transcoder.TranscodeAsync(tempPath, pcmPath, previewPath, cancellationToken);
+            await transcoder.TranscodeAsync(
+                tempPath, pcmPath, previewPath,
+                trim?.StartSeconds ?? 0,
+                trim?.LengthSeconds,
+                cancellationToken);
 
             db.Sounds.Add(sound);
             await db.SaveChangesAsync(cancellationToken);

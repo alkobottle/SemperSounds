@@ -19,86 +19,106 @@ public class UploadValidatorTests
             {
                 MaxDurationSeconds = 5.0,
                 DurationToleranceSeconds = 0.25,
+                MaxSourceDurationSeconds = 300,
                 MaxUploadBytes = 10 * 1024 * 1024,
             }));
 
-    private static AudioProbeResult Audio(double seconds) =>
-        new(true, TimeSpan.FromSeconds(seconds));
+    private static AudioProbeResult Audio(double seconds) => new(true, TimeSpan.FromSeconds(seconds));
 
     [Fact]
-    public async Task ShortClip_IsAccepted()
+    public async Task ShortClipWithoutTrim_IsAccepted()
     {
-        var validator = ValidatorFor(Audio(3.2));
-
-        var result = await validator.ValidateAsync("clip.mp3", fileSizeBytes: 50_000);
+        var result = await ValidatorFor(Audio(3.2)).ValidateAsync("clip.mp3", 50_000, trim: null);
 
         Assert.True(result.IsValid);
         Assert.Equal(3200, result.DurationMs);
     }
 
     [Fact]
-    public async Task LongClip_IsRejectedWithDurationMessage()
+    public async Task LongClipWithoutTrim_IsRejectedAndSaysToTrim()
     {
-        var validator = ValidatorFor(Audio(30));
-
-        var result = await validator.ValidateAsync("podcast.mp3", fileSizeBytes: 50_000);
+        // Long sources are no longer refused outright -- they are refused only while
+        // untrimmed, which is what points the user at the trimmer.
+        var result = await ValidatorFor(Audio(10)).ValidateAsync("long.mp3", 50_000, trim: null);
 
         Assert.False(result.IsValid);
-        Assert.Contains("30", result.Error);
+        Assert.Contains("trim", result.Error, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task LongClipTrimmedToAShortWindow_IsAccepted()
+    {
+        var trim = new TrimRequest(2.1, 3.0);
+
+        var result = await ValidatorFor(Audio(10.4)).ValidateAsync("long.mp3", 50_000, trim);
+
+        Assert.True(result.IsValid);
+        Assert.Equal(3000, result.DurationMs);
+    }
+
+    [Fact]
+    public async Task TrimWindowLongerThanTheLimit_IsRejected()
+    {
+        // The browser enforces this too, but a hand-made request must not get through.
+        var result = await ValidatorFor(Audio(30)).ValidateAsync("long.mp3", 50_000, new TrimRequest(0, 12));
+
+        Assert.False(result.IsValid);
         Assert.Contains("5", result.Error);
     }
 
     [Fact]
-    public async Task ClipAtExactLimit_IsAccepted()
+    public async Task TrimWindowRunningPastTheEnd_IsRejected()
     {
-        var validator = ValidatorFor(Audio(5.0));
+        var result = await ValidatorFor(Audio(4)).ValidateAsync("clip.mp3", 50_000, new TrimRequest(3.0, 4.0));
 
-        var result = await validator.ValidateAsync("exactly-five.mp3", fileSizeBytes: 50_000);
+        Assert.False(result.IsValid);
+        Assert.Contains("end", result.Error, StringComparison.OrdinalIgnoreCase);
+    }
 
-        Assert.True(result.IsValid);
+    [Theory]
+    [InlineData(-1.0, 2.0)]
+    [InlineData(0.0, 0.0)]
+    [InlineData(0.0, -2.0)]
+    public async Task NonsensicalTrimWindow_IsRejected(double start, double length)
+    {
+        var result = await ValidatorFor(Audio(10)).ValidateAsync("clip.mp3", 50_000, new TrimRequest(start, length));
+
+        Assert.False(result.IsValid);
+    }
+
+    [Fact]
+    public async Task SourceLongerThanTheSourceCap_IsRejectedEvenWithATrim()
+    {
+        // Guards against someone uploading an hour of audio just to keep three seconds.
+        var options = new SoundboardOptions { MaxSourceDurationSeconds = 60 };
+        var result = await ValidatorFor(Audio(3600), options).ValidateAsync("podcast.mp3", 50_000, new TrimRequest(0, 3));
+
+        Assert.False(result.IsValid);
+        Assert.Contains("long", result.Error, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
     public async Task ClipSlightlyOverLimit_IsAcceptedWithinTolerance()
     {
-        // Encoders pad. A clip authored as exactly 5.00s routinely probes at 5.02s,
-        // and rejecting those would be indistinguishable from a bug to the user.
-        var validator = ValidatorFor(Audio(5.02));
-
-        var result = await validator.ValidateAsync("padded.mp3", fileSizeBytes: 50_000);
-
-        Assert.True(result.IsValid);
-    }
-
-    [Fact]
-    public async Task ClipBeyondTolerance_IsRejected()
-    {
-        var validator = ValidatorFor(Audio(5.5));
-
-        var result = await validator.ValidateAsync("too-long.mp3", fileSizeBytes: 50_000);
-
-        Assert.False(result.IsValid);
+        // Encoders pad. A clip authored as exactly 5.00s routinely probes at 5.02s.
+        Assert.True((await ValidatorFor(Audio(5.02)).ValidateAsync("padded.mp3", 50_000, trim: null)).IsValid);
     }
 
     [Fact]
     public async Task FileWithNoAudioStream_IsRejected()
     {
-        // Doubles as the "is this really audio" check: a renamed .exe has no audio stream,
-        // so no separate MIME sniffing is needed.
-        var validator = ValidatorFor(AudioProbeResult.NotAudio);
-
-        var result = await validator.ValidateAsync("virus.mp3", fileSizeBytes: 50_000);
+        var result = await ValidatorFor(AudioProbeResult.NotAudio).ValidateAsync("virus.mp3", 50_000, trim: null);
 
         Assert.False(result.IsValid);
         Assert.Contains("audio", result.Error, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
-    public async Task OversizedFile_IsRejectedWithoutProbing()
+    public async Task OversizedFile_IsRejected()
     {
-        var validator = ValidatorFor(Audio(1.0), new SoundboardOptions { MaxUploadBytes = 1024 });
+        var options = new SoundboardOptions { MaxUploadBytes = 1024 };
 
-        var result = await validator.ValidateAsync("huge.mp3", fileSizeBytes: 5_000_000);
+        var result = await ValidatorFor(Audio(1.0), options).ValidateAsync("huge.mp3", 5_000_000, trim: null);
 
         Assert.False(result.IsValid);
         Assert.Contains("large", result.Error, StringComparison.OrdinalIgnoreCase);

@@ -28,9 +28,13 @@ public interface IAudioTranscoder
     /// Normalizing at upload means one clip can't be ten times louder than the rest,
     /// and playback never has to spawn ffmpeg.
     /// </summary>
+    /// <param name="startSeconds">Offset to start from; 0 keeps the file from the beginning.</param>
+    /// <param name="lengthSeconds">How much to keep; null keeps everything after the offset.</param>
     Task TranscodeAsync(
         string sourcePath,
         string pcmDestinationPath,
         string previewDestinationPath,
+        double startSeconds = 0,
+        double? lengthSeconds = null,
         CancellationToken cancellationToken = default);
 }

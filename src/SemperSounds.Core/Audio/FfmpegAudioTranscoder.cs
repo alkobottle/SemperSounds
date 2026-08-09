@@ -24,12 +24,29 @@ public sealed class FfmpegAudioTranscoder(
         string sourcePath,
         string pcmDestinationPath,
         string previewDestinationPath,
+        double startSeconds = 0,
+        double? lengthSeconds = null,
         CancellationToken cancellationToken = default)
     {
-        string[] arguments =
+        List<string> arguments = ["-y"];
+
+        // -ss before -i so ffmpeg seeks rather than decoding and discarding everything up
+        // to the offset. It still seeks accurately here because the output is re-encoded.
+        if (startSeconds > 0)
+        {
+            arguments.AddRange(["-ss", Format(startSeconds)]);
+        }
+
+        arguments.AddRange(["-i", sourcePath]);
+
+        // -t after -i so it limits the kept duration from the seek point onwards.
+        if (lengthSeconds is { } length)
+        {
+            arguments.AddRange(["-t", Format(length)]);
+        }
+
+        arguments.AddRange(
         [
-            "-y",
-            "-i", sourcePath,
 
             // Output 1: raw PCM in the mixer's format.
             "-map", "0:a:0",
@@ -48,7 +65,7 @@ public sealed class FfmpegAudioTranscoder(
             "-codec:a", "libmp3lame",
             "-b:a", "128k",
             previewDestinationPath,
-        ];
+        ]);
 
         var result = await FfmpegRunner.RunAsync(
             _options.FfmpegPath,
@@ -68,6 +85,10 @@ public sealed class FfmpegAudioTranscoder(
             throw new FfmpegException("ffmpeg reported success but produced no audio data.");
         }
     }
+
+    /// <summary>Invariant formatting: ffmpeg will not read "2,1" as two-point-one.</summary>
+    private static string Format(double seconds) =>
+        seconds.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
 
     /// <summary>ffmpeg's stderr is verbose; the last lines carry the actual error.</summary>
     private static string Tail(string text)

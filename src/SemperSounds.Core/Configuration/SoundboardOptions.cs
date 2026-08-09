@@ -27,6 +27,14 @@ public sealed class SoundboardOptions
     [Range(0.0, 1.0)]
     public double DurationToleranceSeconds { get; set; } = 0.25;
 
+    /// <summary>
+    /// Longest source file accepted for trimming. Sources may exceed
+    /// <see cref="MaxDurationSeconds"/> so long as the kept window does not, but this
+    /// stops someone uploading an hour of audio to keep three seconds of it.
+    /// </summary>
+    [Range(1, 3600)]
+    public double MaxSourceDurationSeconds { get; set; } = 300;
+
     /// <summary>Hard cap on the uploaded file size, before any transcoding.</summary>
     [Range(1024, 104857600)]
     public long MaxUploadBytes { get; set; } = 10 * 1024 * 1024;

@@ -53,9 +53,14 @@ public sealed class SoundLibraryTests : IDisposable
     /// <summary>Stands in for ffmpeg by writing plausible output files.</summary>
     private sealed class StubTranscoder : IAudioTranscoder
     {
+        public double LastStart { get; private set; }
+        public double? LastLength { get; private set; }
+
         public Task TranscodeAsync(string sourcePath, string pcmDestinationPath, string previewDestinationPath,
-            CancellationToken cancellationToken = default)
+            double startSeconds = 0, double? lengthSeconds = null, CancellationToken cancellationToken = default)
         {
+            LastStart = startSeconds;
+            LastLength = lengthSeconds;
             File.WriteAllBytes(pcmDestinationPath, new byte[AudioFormat.BytesPerFrame]);
             File.WriteAllBytes(previewDestinationPath, [0x49, 0x44, 0x33]);
             return Task.CompletedTask;
@@ -132,8 +137,24 @@ public sealed class SoundLibraryTests : IDisposable
     private sealed class ThrowingTranscoder : IAudioTranscoder
     {
         public Task TranscodeAsync(string sourcePath, string pcmDestinationPath, string previewDestinationPath,
-            CancellationToken cancellationToken = default) =>
+            double startSeconds = 0, double? lengthSeconds = null, CancellationToken cancellationToken = default) =>
             throw new FfmpegException("ffmpeg exploded");
+    }
+
+    [Fact]
+    public async Task TrimmedUpload_PassesTheWindowToFfmpegAndStoresTheTrimmedDuration()
+    {
+        var transcoder = new StubTranscoder();
+        var library = CreateLibrary(new AudioProbeResult(true, TimeSpan.FromSeconds(10.4)), transcoder);
+
+        var result = await library.AddAsync(
+            Upload(), "long.mp3", "Bit", "", 42, "alkobot", "🔥", new TrimRequest(2.1, 3.0));
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(2.1, transcoder.LastStart);
+        Assert.Equal(3.0, transcoder.LastLength);
+        // The stored duration is the kept window, not the source.
+        Assert.Equal(3000, result.Sound!.DurationMs);
     }
 
     [Fact]
