@@ -88,6 +88,21 @@ bot as a listener, so idle auto-leave never fired. Bot exclusion is now by
 `bot.Client.Cache.User.Id`, which needs no intent, so that path survives the intent being
 revoked.
 
+### Readiness must be restored by Resume, not only Ready
+
+`Ready` fires on a fresh IDENTIFY. A dropped socket is normally repaired by *resuming* the
+session, which Discord answers with RESUMED and NetCord surfaces as a **separate `Resume`
+event**. Marking the bot unusable on `Disconnect` and usable only on `Ready` therefore
+latches it off after the first transient drop: the gateway reconnects and heartbeats
+happily while every join and play refuses with "The bot is not connected to Discord yet",
+until the process is restarted.
+
+`GatewayReadiness` holds the state machine so the transitions are testable without a
+connection, and `DiscordBotService` subscribes to `Ready`, `Resume` and `Disconnect`. This
+was invisible for hours because `OnDisconnectAsync` logged nothing — confirming it meant
+reading TCP counters inside the container to spot that the live socket had received only
+heartbeat ACKs and never a READY payload. Both transitions now log.
+
 ### ffmpeg trim options must precede -i
 
 `FfmpegAudioTranscoder` writes **two** outputs (PCM and mp3 preview). Options placed after

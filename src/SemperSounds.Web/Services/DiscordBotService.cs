@@ -41,12 +41,15 @@ public sealed class DiscordBotService : IHostedService, IDisposable
 
     public GatewayClient Client { get; }
 
-    /// <summary>True once the gateway has sent READY and the guild cache is usable.</summary>
-    public bool IsReady { get; private set; }
+    private readonly GatewayReadiness _readiness = new();
+
+    /// <summary>True once the gateway has identified or resumed and the cache is usable.</summary>
+    public bool IsReady => _readiness.IsReady;
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {
         Client.Ready += OnReadyAsync;
+        Client.Resume += OnResumeAsync;
         Client.VoiceStateUpdate += OnVoiceStateUpdateAsync;
         Client.GuildCreate += OnGuildCreateAsync;
         Client.GuildUserChunk += OnGuildUserChunkAsync;
@@ -60,7 +63,7 @@ public sealed class DiscordBotService : IHostedService, IDisposable
 
     public async Task StopAsync(CancellationToken cancellationToken)
     {
-        IsReady = false;
+        _readiness.MarkDisconnected();
         try
         {
             await Client.CloseAsync(cancellationToken: cancellationToken);
@@ -73,15 +76,35 @@ public sealed class DiscordBotService : IHostedService, IDisposable
 
     private ValueTask OnReadyAsync(ReadyEventArgs args)
     {
-        IsReady = true;
+        _readiness.MarkReady();
         _logger.LogInformation("Discord gateway ready as {User}", args.User.Username);
+        _events.RaiseConnectionChanged();
+        return ValueTask.CompletedTask;
+    }
+
+    /// <summary>
+    /// A dropped socket is usually restored by resuming the session, which Discord answers
+    /// with RESUMED rather than READY. Without this the bot stays marked unusable for the
+    /// rest of the process's life — refusing every join and play — while the gateway
+    /// carries on heartbeating perfectly happily.
+    /// </summary>
+    private ValueTask OnResumeAsync()
+    {
+        _readiness.MarkResumed();
+        _logger.LogInformation("Discord gateway resumed its session");
         _events.RaiseConnectionChanged();
         return ValueTask.CompletedTask;
     }
 
     private ValueTask OnDisconnectAsync(DisconnectEventArgs args)
     {
-        IsReady = false;
+        _readiness.MarkDisconnected();
+
+        // Logged because this is the entry to the only state in which the UI refuses to
+        // work; diagnosing it from the outside otherwise means reading socket counters.
+        _logger.LogWarning(
+            "Discord gateway disconnected (reconnecting: {Reconnect})", args.Reconnect);
+
         _events.RaiseConnectionChanged();
         return ValueTask.CompletedTask;
     }
@@ -151,6 +174,7 @@ public sealed class DiscordBotService : IHostedService, IDisposable
     public void Dispose()
     {
         Client.Ready -= OnReadyAsync;
+        Client.Resume -= OnResumeAsync;
         Client.VoiceStateUpdate -= OnVoiceStateUpdateAsync;
         Client.GuildCreate -= OnGuildCreateAsync;
         Client.GuildUserChunk -= OnGuildUserChunkAsync;
