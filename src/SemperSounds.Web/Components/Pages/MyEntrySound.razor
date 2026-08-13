@@ -1,0 +1,277 @@
+@page "/entry-sound"
+@attribute [Authorize]
+@implements IDisposable
+@inject SoundLibrary Library
+@* Named Entries, not EntrySounds: that would collide with the SemperSounds.Core.EntrySounds
+   namespace, which _Imports pulls into scope. *@
+@inject EntrySoundLibrary Entries
+@inject GuildUserDirectory Users
+@inject SoundboardEvents Events
+@inject ISnackbar Snackbar
+@inject IJSRuntime JS
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+<PageTitle>Entry sound · SemperSounds</PageTitle>
+
+<MudGrid>
+    <MudItem xs="12" md="7">
+        <MudPaper Class="pa-4" Elevation="2">
+            <div class="d-flex align-center gap-2 mb-1">
+                <MudIcon Icon="@Icons.Material.Filled.SensorDoor" Color="Color.Secondary" />
+                <MudText Typo="Typo.h6">Your entry sound</MudText>
+            </div>
+
+            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
+                Plays when you walk into a voice channel the bot is already sitting in,
+                as long as somebody else is there to hear it.
+            </MudText>
+
+            @if (_loading)
+            {
+                <MudProgressLinear Indeterminate="true" Color="Color.Secondary" />
+            }
+            else
+            {
+                @if (_block is not null)
+                {
+                    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mb-4">
+                        <MudText Typo="Typo.body2">
+                            An administrator has silenced your entry sound.
+                        </MudText>
+                        @if (!string.IsNullOrWhiteSpace(_block.Reason))
+                        {
+                            <MudText Typo="Typo.body2" Class="mt-1">
+                                Reason: @_block.Reason
+                            </MudText>
+                        }
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                            Set by @(string.IsNullOrWhiteSpace(_block.BlockedByName) ? "an administrator" : _block.BlockedByName)
+                        </MudText>
+                    </MudAlert>
+                }
+                else if (!_settings.IsEnabled)
+                {
+                    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mb-4">
+                        Entry sounds are switched off for the whole server right now.
+                    </MudAlert>
+                }
+                else if (_settings.SnoozedUntil is { } until && until > DateTimeOffset.UtcNow)
+                {
+                    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mb-4">
+                        Entry sounds are snoozed until @until.ToLocalTime().ToString("HH:mm").
+                    </MudAlert>
+                }
+
+                @if (_current?.Sound is { } sound)
+                {
+                    <MudPaper Class="pa-3 mb-4" Elevation="0" Style="border: 1px solid var(--mud-palette-lines-default);">
+                        <div class="d-flex align-center" style="gap: 12px;">
+                            <SoundEmojiView Value="@sound.Emoji" Size="40" />
+
+                            <div class="flex-grow-1" style="min-width: 0;">
+                                <MudText Typo="Typo.subtitle1" Class="ss-truncate" title="@sound.Name">
+                                    @sound.Name
+                                </MudText>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                    @((sound.DurationMs / 1000.0).ToString("0.0"))s
+                                </MudText>
+                            </div>
+
+                            <MudTooltip Text="Preview in your browser only">
+                                <MudIconButton Icon="@Icons.Material.Filled.Headphones"
+                                               Size="Size.Small"
+                                               OnClick="@(() => Preview(sound))" />
+                            </MudTooltip>
+
+                            <MudTooltip Text="Clear my entry sound">
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                               Color="Color.Error"
+                                               Size="Size.Small"
+                                               OnClick="Clear" />
+                            </MudTooltip>
+                        </div>
+                    </MudPaper>
+
+                    <MudSwitch T="bool"
+                               Value="@_current.IsMuted"
+                               ValueChanged="SetMuted"
+                               Color="Color.Secondary"
+                               Label="Mute my entry sound (keeps the pick)" />
+                }
+                else
+                {
+                    <MudAlert Severity="Severity.Normal" Variant="Variant.Outlined" Class="mb-4">
+                        You have not picked one yet, so nothing plays when you join.
+                    </MudAlert>
+                }
+
+                <MudAutocomplete T="Sound"
+                                 Label="@($"Pick a sound (up to {_settings.MaxDurationMs / 1000.0:0.#}s)")"
+                                 Value="_picker"
+                                 ValueChanged="Assign"
+                                 SearchFunc="SearchSounds"
+                                 ToStringFunc="@(s => s?.Name ?? string.Empty)"
+                                 ResetValueOnEmptyText="true"
+                                 Clearable="true"
+                                 Class="mt-4"
+                                 HelperText="Any sound from the board. Star it there too if you want it on a key." />
+
+                <AuthorizeView Policy="@EntrySoundPolicies.Administrator" Context="adminContext">
+                    <Authorized>
+                        <MudButton Href="/admin/entry-sounds"
+                                   Variant="Variant.Text"
+                                   Size="Size.Small"
+                                   StartIcon="@Icons.Material.Filled.AdminPanelSettings"
+                                   Class="mt-4">
+                            Server settings
+                        </MudButton>
+                    </Authorized>
+                </AuthorizeView>
+            }
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" md="5">
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudText Typo="Typo.subtitle1" Class="mb-2">Who walks in to what</MudText>
+
+            @if (_everyone.Count == 0)
+            {
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                    Nobody has picked one yet.
+                </MudText>
+            }
+            else
+            {
+                <MudList T="string" Dense="true">
+                    @foreach (var entry in _everyone)
+                    {
+                        <MudListItem T="string">
+                            <div class="d-flex align-center" style="gap: 8px; min-width: 0;">
+                                <UserAvatar UserId="@entry.UserId" Pixels="20" />
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary">→</MudText>
+                                <SoundEmojiView Value="@(entry.Sound?.Emoji ?? string.Empty)" Size="18" />
+                                <MudText Typo="Typo.body2" Class="ss-truncate flex-grow-1">
+                                    @entry.Sound?.Name
+                                </MudText>
+                                @if (entry.IsMuted)
+                                {
+                                    <MudTooltip Text="Muted by themselves">
+                                        <MudIcon Icon="@Icons.Material.Filled.VolumeOff"
+                                                 Size="Size.Small"
+                                                 Color="Color.Default" />
+                                    </MudTooltip>
+                                }
+                                @if (_blockedUserIds.Contains(entry.UserId))
+                                {
+                                    <MudTooltip Text="Silenced by an administrator">
+                                        <MudIcon Icon="@Icons.Material.Filled.Block"
+                                                 Size="Size.Small"
+                                                 Color="Color.Warning" />
+                                    </MudTooltip>
+                                }
+                            </div>
+                        </MudListItem>
+                    }
+                </MudList>
+            }
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+@* Hidden element used to play previews locally without touching the voice channel. *@
+<audio @ref="_previewPlayer" style="display:none"></audio>
+
+@code {
+    private EntrySound? _current;
+    private EntrySoundBlock? _block;
+    private EntrySoundSettingsSnapshot _settings;
+    private List<EntrySound> _everyone = [];
+    private HashSet<ulong> _blockedUserIds = [];
+    private List<Sound> _sounds = [];
+
+    /// <summary>Always cleared after a pick: the box is an action, not a bound value.</summary>
+    private Sound? _picker;
+
+    private bool _loading = true;
+    private ulong _userId;
+    private ElementReference _previewPlayer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        _userId = state.User.GetDiscordUserId();
+
+        // Someone else deleting a sound cascades assignments away, so this page has to
+        // follow the library rather than trusting what it loaded once.
+        Events.LibraryChanged += OnLibraryChanged;
+
+        await ReloadAsync();
+        _loading = false;
+    }
+
+    public void Dispose() => Events.LibraryChanged -= OnLibraryChanged;
+
+    private void OnLibraryChanged() => InvokeAsync(async () =>
+    {
+        await ReloadAsync();
+        StateHasChanged();
+    });
+
+    private async Task ReloadAsync()
+    {
+        _settings = await Entries.GetSettingsAsync();
+        _current = await Entries.FindAsync(_userId);
+        _block = await Entries.FindBlockAsync(_userId);
+        _everyone = await Entries.GetAllAsync();
+        _sounds = await Library.GetAllAsync();
+
+        _blockedUserIds = [.. (await Entries.GetBlockedUserIdsAsync())];
+    }
+
+    private Task<IEnumerable<Sound>> SearchSounds(string? term, CancellationToken cancellationToken)
+    {
+        IEnumerable<Sound> matches = string.IsNullOrWhiteSpace(term)
+            ? _sounds
+            : _sounds.Where(s => s.Name.Contains(term, StringComparison.OrdinalIgnoreCase));
+
+        return Task.FromResult(matches.OrderBy(s => s.Name).Take(20));
+    }
+
+    private async Task Assign(Sound? sound)
+    {
+        _picker = null;
+
+        if (sound is null)
+        {
+            return;
+        }
+
+        var result = await Entries.AssignAsync(_userId, sound.Id);
+
+        if (!result.IsSuccess)
+        {
+            Snackbar.Add(result.Error, Severity.Warning);
+            return;
+        }
+
+        Snackbar.Add($"{sound.Name} plays when you join", Severity.Success);
+        await ReloadAsync();
+    }
+
+    private async Task Clear()
+    {
+        await Entries.ClearAsync(_userId);
+        Snackbar.Add("Entry sound cleared", Severity.Success);
+        await ReloadAsync();
+    }
+
+    private async Task SetMuted(bool muted)
+    {
+        await Entries.SetMutedAsync(_userId, muted);
+        await ReloadAsync();
+    }
+
+    private async Task Preview(Sound sound) =>
+        await JS.InvokeVoidAsync("semperSounds.preview", _previewPlayer, $"/sounds/{sound.Id}/preview");
+}

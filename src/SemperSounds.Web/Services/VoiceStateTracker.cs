@@ -59,7 +59,16 @@ public sealed class VoiceStateTracker(
     /// before GUILD_CREATE repopulates it, and reporting 0 there would eject the bot from
     /// a channel people are still sitting in.
     /// </returns>
-    public int? CountHumansIn(ulong channelId)
+    public int? CountHumansIn(ulong channelId) => CountHumansIn(channelId, exceptUserId: 0);
+
+    /// <param name="exceptUserId">
+    /// Left out of the count whether or not the cache has applied their update yet. Pass the
+    /// person who just arrived: the answer is then the same regardless of whether NetCord
+    /// folded that VOICE_STATE_UPDATE into the cache before or after the handler ran, so
+    /// "is there anybody else here" does not depend on dispatch ordering. Zero is not a
+    /// reachable snowflake, so it excludes nobody.
+    /// </param>
+    public int? CountHumansIn(ulong channelId, ulong exceptUserId)
     {
         var guild = Guild;
         if (guild is null)
@@ -77,6 +86,7 @@ public sealed class VoiceStateTracker(
         return guild.VoiceStates.Values.Count(state =>
             state.ChannelId == channelId &&
             state.UserId != selfId &&
+            state.UserId != exceptUserId &&
             !(guild.Users.TryGetValue(state.UserId, out var user) && user.IsBot));
     }
 

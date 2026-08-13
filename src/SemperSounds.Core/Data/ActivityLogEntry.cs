@@ -5,6 +5,14 @@ public enum SoundboardActivity
     Played = 0,
     Joined = 1,
     Left = 2,
+
+    /// <summary>
+    /// Someone's entry sound fired when they walked in. Its own kind rather than
+    /// <see cref="Played"/>, which reads as "a human pressed a button" and would credit
+    /// them with an action they did not take — in the one place people look to work out
+    /// who did what. The values are explicit, so adding this renumbers no existing row.
+    /// </summary>
+    EntryPlayed = 3,
 }
 
 /// <summary>One thing that happened on the soundboard: a sound played, or the bot summoned

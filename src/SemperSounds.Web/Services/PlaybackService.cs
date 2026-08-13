@@ -4,6 +4,7 @@ using NetCord.Gateway;
 using NetCord.Gateway.Voice;
 using SemperSounds.Core.Audio;
 using SemperSounds.Core.Configuration;
+using SemperSounds.Core.EntrySounds;
 using SemperSounds.Core.Sounds;
 
 namespace SemperSounds.Web.Services;
@@ -222,6 +223,78 @@ public sealed class PlaybackService(
         var channelName = ConnectedChannelName;
         await LogActivityAsync(log => log.LogPlayAsync(sound, userId, userName, channelId, channelName));
 
+        events.RaiseSoundPlayed(new SoundPlayedNotification(
+            sound.Id, sound.Name, userId, userName, DateTimeOffset.UtcNow));
+
+        return PlaybackResult.Ok;
+    }
+
+    /// <summary>
+    /// Plays somebody's entry sound into the channel they just walked into.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Unlike <see cref="PlayAsync"/> there is no "you must be in the bot's channel" check.
+    /// The arriving user is in it by construction, and re-reading the cache here would
+    /// reintroduce exactly the ordering race the caller took care to avoid.
+    /// </para>
+    /// <para>
+    /// What survives is the invariant that matters. Audio only ever reaches the mixer while
+    /// the bot is connected to <paramref name="channelId"/> — checked before the disk read
+    /// and again immediately after it — and <paramref name="soundId"/> must equal the
+    /// user's own stored assignment, re-read here. So the only extra authority this grants
+    /// over the board is "an existing entry sound can be re-fired in a channel the bot is
+    /// already sitting in", rather than a way to play anything at anyone.
+    /// </para>
+    /// </remarks>
+    /// <param name="gain">Server-wide entry sound volume, so they sit under conversation.</param>
+    internal async Task<PlaybackResult> PlayEntrySoundAsync(
+        ulong userId, string userName, ulong channelId, Guid soundId, float gain,
+        CancellationToken cancellationToken = default)
+    {
+        if (ConnectedChannelId != channelId)
+        {
+            return PlaybackResult.Fail("The bot is not in that channel.");
+        }
+
+        using var scope = scopeFactory.CreateScope();
+        var library = scope.ServiceProvider.GetRequiredService<SoundLibrary>();
+        var entrySounds = scope.ServiceProvider.GetRequiredService<EntrySoundLibrary>();
+
+        var assignment = await entrySounds.FindAsync(userId, cancellationToken);
+        if (assignment?.SoundId != soundId)
+        {
+            return PlaybackResult.Fail("That is not this user's entry sound.");
+        }
+
+        var sound = await library.FindAsync(soundId, cancellationToken);
+        if (sound is null)
+        {
+            return PlaybackResult.Fail("That sound no longer exists.");
+        }
+
+        var pcm = await library.ReadPcmAsync(sound, cancellationToken);
+        if (pcm is null)
+        {
+            logger.LogWarning("Audio file missing for sound {SoundId} ({Name})", sound.Id, sound.Name);
+            return PlaybackResult.Fail("That sound's audio file is missing.");
+        }
+
+        // Re-checked after the disk read: a Leave landing in that window would otherwise
+        // spill this clip into whatever channel the bot moved to next.
+        if (ConnectedChannelId != channelId)
+        {
+            return PlaybackResult.Fail("The bot left that channel.");
+        }
+
+        _mixer.Add(pcm, sound.Id, gain);
+
+        var channelName = ConnectedChannelName;
+        await LogActivityAsync(
+            log => log.LogEntrySoundAsync(sound, userId, userName, channelId, channelName));
+
+        // Reusing SoundPlayed rather than adding an entry-specific notification: every new
+        // subscription is another handler a component can leak and pin its circuit with.
         events.RaiseSoundPlayed(new SoundPlayedNotification(
             sound.Id, sound.Name, userId, userName, DateTimeOffset.UtcNow));
 

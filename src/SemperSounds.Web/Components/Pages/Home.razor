@@ -3,6 +3,9 @@
 @implements IDisposable
 @inject SoundLibrary Library
 @inject FavoriteLibrary Favorites
+@* Named Entries, not EntrySounds: that would collide with the SemperSounds.Core.EntrySounds
+   namespace, which _Imports pulls into scope. *@
+@inject EntrySoundLibrary Entries
 @inject ActivityLog Activity
 @inject PlaybackService Playback
 @inject SoundboardEvents Events
@@ -147,6 +150,7 @@
                 {
                     var isFavorite = _favoriteIds.Contains(sound.Id);
                     var isPlaying = _playingIds.Contains(sound.Id);
+                    var isEntrySound = _entrySoundId == sound.Id;
 
                     <MudItem xs="6" sm="4" md="3" lg="2">
                         <MudPaper Class="pa-3 d-flex flex-column" Style="height: 100%;" Elevation="2">
@@ -167,6 +171,16 @@
                                                     Pixels="16" />
                                     </MudText>
                                 </div>
+
+                                @* Both live in the header rather than the button row below:
+                                   the header is the "my relationship to this sound" slot, and
+                                   that row is already four buttons wide inside an xs=6 tile. *@
+                                <MudTooltip Text="@(isEntrySound ? "Stop using as my entry sound" : "Use as my entry sound")">
+                                    <MudIconButton Icon="@Icons.Material.Filled.SensorDoor"
+                                                   Color="@(isEntrySound ? Color.Secondary : Color.Default)"
+                                                   Size="Size.Small"
+                                                   OnClick="@(() => ToggleEntrySound(sound))" />
+                                </MudTooltip>
 
                                 <MudTooltip Text="@(isFavorite ? "Remove from favourites" : "Add to favourites")">
                                     <MudIconButton Icon="@(isFavorite ? Icons.Material.Filled.Star : Icons.Material.Outlined.StarBorder)"
@@ -246,6 +260,7 @@
 @code {
     private List<Favorite> _favorites = [];
     private HashSet<Guid> _favoriteIds = [];
+    private Guid? _entrySoundId;
     private IReadOnlySet<Guid> _playingIds = new HashSet<Guid>();
 
     private List<Sound> _all = [];
@@ -282,6 +297,32 @@
     {
         _favorites = await Favorites.GetForUserAsync(_userId);
         _favoriteIds = await Favorites.GetFavoritedSoundIdsAsync(_userId);
+
+        // Deleting a sound cascades the assignment away, so this is reloaded on the same
+        // path as favourites rather than only once at startup.
+        _entrySoundId = (await Entries.FindAsync(_userId))?.SoundId;
+    }
+
+    private async Task ToggleEntrySound(Sound sound)
+    {
+        if (_entrySoundId == sound.Id)
+        {
+            await Entries.ClearAsync(_userId);
+            Snackbar.Add("Entry sound cleared", Severity.Success);
+        }
+        else
+        {
+            var result = await Entries.AssignAsync(_userId, sound.Id);
+            if (!result.IsSuccess)
+            {
+                Snackbar.Add(result.Error, Severity.Warning);
+                return;
+            }
+
+            Snackbar.Add($"{sound.Name} plays when you join", Severity.Success);
+        }
+
+        await ReloadFavoritesAsync();
     }
 
     private async Task ToggleFavorite(Sound sound)

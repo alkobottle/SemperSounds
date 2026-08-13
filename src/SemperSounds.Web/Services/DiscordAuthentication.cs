@@ -4,6 +4,7 @@ using System.Text.Json;
 using AspNet.Security.OAuth.Discord;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authentication.OAuth;
 using SemperSounds.Core.Configuration;
 
@@ -87,7 +88,15 @@ public static class DiscordAuthentication
                 };
             });
 
-        services.AddAuthorization();
+        // Guild roles are read live by the handler rather than baked into claims here:
+        // this cookie lasts thirty days, so a role change would otherwise take that long
+        // to matter.
+        services.AddAuthorizationBuilder()
+            .AddPolicy(EntrySoundPolicies.Administrator, policy => policy
+                .RequireAuthenticatedUser()
+                .AddRequirements(new EntrySoundAdminRequirement()));
+
+        services.AddSingleton<IAuthorizationHandler, EntrySoundAdminHandler>();
         services.AddCascadingAuthenticationState();
 
         return services;

@@ -120,6 +120,73 @@ stream risks it rushing frames to catch up. `EnterSpeakingStateAsync` must still
 on join: it readies the connection, and without it the first `SendVoiceAsync` throws
 "Connection not started".
 
+### Entry sounds are passive, and VOICE_STATE_UPDATE is not a join
+
+The bot **never** auto-joins to play someone's entry sound. If it is not already connected
+to the channel, nothing happens. That single rule is what keeps the feature from stealing
+the bot away from a channel it is being used in, and from adding a ~1s connect handshake
+before every clip.
+
+Discord sends `VOICE_STATE_UPDATE` for muting, deafening and enabling video as well as for
+moving, and every one of them carries the member's *current* channel. `VoiceTransitionJournal`
+remembers the *previous* channel per user so an arrival can be told apart from a microphone
+toggle. This does not contradict `VoiceStateTracker`'s rule against duplicating voice state:
+that rule is about *current* state, which NetCord owns; the previous channel is something the
+cache structurally cannot answer, because NetCord overwrites each entry in place. The journal
+is seeded wholesale from `GUILD_CREATE` — without that, the first update after every reconnect
+reads as everyone arriving at once.
+
+Two more things that were easy to get wrong here:
+
+- The destination comes from the **payload**, never the cache, so nothing depends on whether
+  NetCord applies the update before or after calling the handler. For the same reason
+  `CountHumansIn` takes an `exceptUserId`: excluding the arriving member makes "is anybody
+  else here" the same answer either way.
+- `OnVoiceStateUpdateAsync` had never filtered out the **bot's own** voice state, which cost
+  nothing while the payload was discarded. Every `JoinAsync` now reads as an arrival without
+  that filter.
+
+`EntrySoundPolicy` holds every rule (enabled, snoozed, occupancy, assignment, self-mute,
+block, cooldown) as pure state, so all of it is testable without a gateway. Note it treats
+unknown occupancy as "do not play", the deliberate **opposite** of `IdleTimer`'s "unknown
+means someone is listening" — both refuse to act on a guess, and the action differs.
+
+The entry cooldown has its own dictionary in `EntrySoundCoordinator`, deliberately not
+`PlaybackService._lastPlayed`: sharing it would mean pressing a board button silences your
+own entry sound, and the admin's live setting would fight `Soundboard__PerUserCooldownSeconds`.
+
+### A singleton that only subscribes to events is never constructed
+
+`EntrySoundCoordinator` is registered **twice** — `AddSingleton` plus
+`AddHostedService(sp => sp.GetRequiredService<...>())`, the same shape `DiscordBotService`
+uses. Nothing resolves it otherwise, so the container never builds it, and the failure is
+silent: entry sounds simply never fire. Any future event-only singleton needs the same.
+
+Both `EntrySoundAdmin` and `EntrySoundCoordinator` take an optional `TimeProvider` so tests
+can drive the clock. `TimeProvider` is not registered in DI; the container honours the
+default value instead, which `EntrySoundRegistrationTests` pins.
+
+### ActivityLine's switches all end in an arm meaning "Left"
+
+All three `switch` expressions in `ActivityLine.razor` finish with `_ =>` arms that render a
+departure. A new `SoundboardActivity` member therefore shows up with the logout icon reading
+"sent the bot away from voice" — no error, just a wrong sentence in the log. Give every new
+kind an explicit arm **before** the default. The enum values are explicit, so adding one
+renumbers nothing and needs no migration.
+
+### Failing a policy must not redirect to login
+
+`Routes.razor`'s `NotAuthorized` used to render `RedirectToLogin` unconditionally, which is
+right only for anonymous users. An authenticated user who fails a policy — the admin page —
+would be sent to `/login`, handed a cookie they already hold, bounced back, and fail again:
+an infinite redirect rather than an explanation. It now branches on
+`context.User.Identity?.IsAuthenticated` and renders `AdminRequired` instead.
+
+`IGuildPermissions` returns `bool?`, and **null is not "no"**. `Guild.Users` fills
+asynchronously from `GuildUserChunk` seconds after every restart, so a null answer means "not
+known yet". The policy fails closed on it; `AdminRequired` tells the two apart for the reader
+and reloads once the member list lands.
+
 ### There is no Bootstrap
 
 It was removed during scaffolding, so `text-truncate`, `text-center` and friends are
@@ -147,12 +214,17 @@ DI singletons — there is no IPC, message broker, or second service.
 Blazor page → SoundLibrary (scoped)   → EF Core → SQLite      /data/sempersounds.db
             → PlaybackService (single) → PcmMixer → OpusEncodeStream → NetCord VoiceClient
             ← SoundboardEvents (in-proc pub/sub) ← VoiceStateTracker ← GatewayClient
+
+GatewayClient → DiscordBotService → VoiceTransitionJournal → SoundboardEvents.VoiceMemberArrived
+              → EntrySoundCoordinator (single) → EntrySoundPolicy → PlaybackService → PcmMixer
 ```
 
 ### Lifetime boundary (most common source of mistakes)
 
-`DiscordBotService`, `VoiceStateTracker`, `PlaybackService` and `SoundboardEvents` are
-**singletons**. `SoundboardDbContext`, `SoundLibrary` and the ffmpeg wrappers are
+`DiscordBotService`, `VoiceStateTracker`, `PlaybackService`, `SoundboardEvents`,
+`EntrySoundCoordinator` and `GuildPermissionProvider` are
+**singletons**. `SoundboardDbContext`, `SoundLibrary`, `EntrySoundLibrary`, `EntrySoundAdmin`
+and the ffmpeg wrappers are
 **scoped**. A singleton must therefore reach the library through `IServiceScopeFactory` —
 see `PlaybackService.PlayAsync`. Injecting `SoundLibrary` into a singleton directly will
 capture a disposed context.
@@ -187,10 +259,21 @@ membership of `Discord__GuildId` (checked in `OnCreatingTicket`, which calls `co
 so a non-member never receives a cookie); playing requires being in the bot's *current*
 channel; uploading and deleting are open to any signed-in member, deliberately.
 
+The same rule extends to entry sounds: `EntrySoundAdmin` takes the **acting** user's id and
+checks `IGuildPermissions` before every write, so hiding the page is not what protects it.
+`PlaybackService.PlayEntrySoundAsync` skips the "you must be in the bot's channel" check —
+the arriving member is in it by construction — but keeps the invariants that matter: the
+target must be the bot's *current* channel, re-checked after the disk read, and the sound
+must equal that user's own stored assignment. The extra authority it grants is therefore
+only "an existing entry sound can be re-fired in a channel the bot already sits in".
+
 `ActivityLogEntry` denormalizes `SoundName` and holds **no foreign key** to `Sound`,
-because anyone can delete sounds and the history must survive it. `Favorite` deliberately
-does the opposite — a real foreign key with cascade delete — since a favourite pointing at
-a deleted sound is only a dangling shortcut.
+because anyone can delete sounds and the history must survive it. `Favorite` and `EntrySound`
+deliberately do the opposite — a real foreign key with cascade delete — since either pointing
+at a deleted sound is only a dangling shortcut. `EntrySoundBlock` is its own table rather
+than a flag on `EntrySound` for a third reason: a block must outlive the assignment, or
+clearing and re-picking a sound would launder it away, and nobody without an assignment
+could be blocked at all.
 
 ### Blazor and MudBlazor specifics
 

@@ -16,9 +16,13 @@
 
     [Parameter] public int AvatarPixels { get; set; } = 18;
 
+    @* Every switch below ends in a "_ =>" arm that means Left, so a new SoundboardActivity
+       member silently renders as "sent the bot away". Each one therefore needs its own arm
+       before the default. *@
     private string Icon => Entry.Kind switch
     {
         SoundboardActivity.Played => Icons.Material.Filled.MusicNote,
+        SoundboardActivity.EntryPlayed => Icons.Material.Filled.SensorDoor,
         SoundboardActivity.Joined => Icons.Material.Filled.Login,
         _ => Icons.Material.Filled.Logout,
     };
@@ -26,6 +30,7 @@
     private Color Colour => Entry.Kind switch
     {
         SoundboardActivity.Played => Color.Primary,
+        SoundboardActivity.EntryPlayed => Color.Secondary,
         SoundboardActivity.Joined => Color.Success,
         _ => Color.Default,
     };
@@ -33,6 +38,7 @@
     private string Description => Entry.Kind switch
     {
         SoundboardActivity.Played => $"played {Entry.SoundName}",
+        SoundboardActivity.EntryPlayed => $"walked in to {Entry.SoundName}",
         SoundboardActivity.Joined => $"summoned the bot to {ChannelName}",
         // No user means nobody was left to hear it, so say why rather than just "left".
         _ when Entry.IsAutomatic => $"Bot left {ChannelName} — nobody remained",

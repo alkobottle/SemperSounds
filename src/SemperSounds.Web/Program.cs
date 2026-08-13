@@ -9,6 +9,7 @@ using MudBlazor.Services;
 using SemperSounds.Core.Audio;
 using SemperSounds.Core.Configuration;
 using SemperSounds.Core.Data;
+using SemperSounds.Core.EntrySounds;
 using SemperSounds.Core.Sounds;
 using SemperSounds.Web.Components;
 using SemperSounds.Web.Services;
@@ -59,6 +60,8 @@ builder.Services.AddScoped<UploadValidator>();
 builder.Services.AddScoped<SoundLibrary>();
 builder.Services.AddScoped<FavoriteLibrary>();
 builder.Services.AddScoped<ActivityLog>();
+builder.Services.AddScoped<EntrySoundLibrary>();
+builder.Services.AddScoped<EntrySoundAdmin>();
 
 // Discord side. All singletons: one gateway connection and one voice connection
 // serve every browser session.
@@ -69,6 +72,13 @@ builder.Services.AddSingleton<GuildUserDirectory>();
 builder.Services.AddSingleton<VoiceStateTracker>();
 builder.Services.AddSingleton<GuildEmojiProvider>();
 builder.Services.AddSingleton<PlaybackService>();
+builder.Services.AddSingleton<IGuildPermissions, GuildPermissionProvider>();
+
+// Registered twice on purpose, like DiscordBotService above: this only subscribes to an
+// event, and a singleton nobody resolves is never constructed — which would leave entry
+// sounds silently never firing.
+builder.Services.AddSingleton<EntrySoundCoordinator>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<EntrySoundCoordinator>());
 
 builder.Services.AddSemperSoundsAuthentication(builder.Configuration);
 

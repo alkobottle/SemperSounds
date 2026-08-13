@@ -28,6 +28,28 @@ public sealed class ActivityLogTests : IDisposable
     }
 
     [Fact]
+    public async Task EntrySounds_AreLoggedAsTheirOwnKind()
+    {
+        // Not SoundboardActivity.Played: that reads as "this person pressed a button" and
+        // would credit them with an action they did not take, in the one place people go to
+        // work out who did what. ActivityLine renders the two differently.
+        var sound = new Sound { Name = "airhorn", UploaderId = 1, UploaderName = "alkobot" };
+        _db.Sounds.Add(sound);
+        await _db.SaveChangesAsync();
+
+        await _log.LogEntrySoundAsync(sound, 7, "mace", 99, "VAL");
+
+        var entry = Assert.Single(await _log.GetRecentAsync(10));
+        Assert.Equal(SoundboardActivity.EntryPlayed, entry.Kind);
+        Assert.Equal("airhorn", entry.SoundName);
+        Assert.Equal(7ul, entry.UserId);
+
+        // IsAutomatic means "the bot left because nobody remained" and must keep meaning
+        // exactly that — an entry sound is not a departure.
+        Assert.False(entry.IsAutomatic);
+    }
+
+    [Fact]
     public async Task PlaysJoinsAndLeaves_ShareOneChronologicalStream()
     {
         var sound = new Sound { Name = "airhorn", UploaderId = 1, UploaderName = "alkobot" };

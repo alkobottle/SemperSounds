@@ -182,6 +182,86 @@ public class PcmMixerTests
     }
 
     [Fact]
+    public void DefaultGain_LeavesSamplesUntouched()
+    {
+        // Every existing caller binds the default, so unity has to be exactly unity —
+        // a rounding slip here would quietly alter every board press.
+        var mixer = new PcmMixer();
+        mixer.Add(Pcm(1234, -1234));
+        var frame = new byte[AudioFormat.BytesPerFrame];
+
+        mixer.MixNextFrame(frame);
+
+        Assert.Equal(1234, SampleAt(frame, 0));
+        Assert.Equal(-1234, SampleAt(frame, 1));
+    }
+
+    [Fact]
+    public void AttenuatedVoice_IsScaledBeforeMixing()
+    {
+        // Entry sounds sit under conversation at a server-wide gain. 0.5 is exactly
+        // representable, so this asserts the scaling itself, not a rounding mode.
+        var mixer = new PcmMixer();
+        mixer.Add(Pcm(1000, -1000), gain: 0.5f);
+        var frame = new byte[AudioFormat.BytesPerFrame];
+
+        mixer.MixNextFrame(frame);
+
+        Assert.Equal(500, SampleAt(frame, 0));
+        Assert.Equal(-500, SampleAt(frame, 1));
+    }
+
+    [Fact]
+    public void AmplifiedVoices_StillClampInsteadOfWrapping()
+    {
+        // Gain scales each voice's contribution but must not move the single saturation
+        // point. 10000 twice is 20000 and fits a short unscaled, so this only reaches the
+        // clamp if the gain was really applied — and a bare cast of 40000 wraps to -25536.
+        var mixer = new PcmMixer();
+        mixer.Add(Pcm(10000, -10000), gain: 2f);
+        mixer.Add(Pcm(10000, -10000), gain: 2f);
+        var frame = new byte[AudioFormat.BytesPerFrame];
+
+        mixer.MixNextFrame(frame);
+
+        Assert.Equal(short.MaxValue, SampleAt(frame, 0));
+        Assert.Equal(short.MinValue, SampleAt(frame, 1));
+    }
+
+    [Fact]
+    public void Gain_IsClampedToTheAllowedRange()
+    {
+        // A settings row holding a nonsense volume must not produce garbage audio.
+        var mixer = new PcmMixer();
+        mixer.Add(Pcm(1000), gain: 100f);
+        mixer.Add(Pcm(500), gain: -5f);
+        var frame = new byte[AudioFormat.BytesPerFrame];
+
+        mixer.MixNextFrame(frame);
+
+        // 1000 * 2 (the ceiling) + 500 * 0 (the floor). Unscaled this would be 1500,
+        // so the assertion fails unless both ends of the clamp are honoured.
+        Assert.Equal(2000, SampleAt(frame, 0));
+    }
+
+    [Fact]
+    public void SilencedVoice_IsStillEvicted()
+    {
+        // Zero gain is deliberately not special-cased: the voice must still advance its
+        // position and be dropped, or it pins ActiveKeys — and the pump's speaking state
+        // with it — forever, the same trap the trailing-odd-byte eviction guards against.
+        var mixer = new PcmMixer();
+        mixer.Add(Pcm(1234, 5678), gain: 0f);
+        var frame = new byte[AudioFormat.BytesPerFrame];
+
+        mixer.MixNextFrame(frame);
+
+        Assert.Equal(0, SampleAt(frame, 0));
+        Assert.Equal(0, mixer.ActiveCount);
+        Assert.Empty(mixer.ActiveKeys);
+    }
+
+    [Fact]
     public void ClipWithTrailingOddByte_IsStillEvicted()
     {
         // A truncated or corrupt file can end mid-sample. That last lone byte can never

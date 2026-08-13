@@ -4,7 +4,17 @@
     <Found Context="routeData">
         <AuthorizeRouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)">
             <NotAuthorized>
-                <RedirectToLogin />
+                @* Signing in cannot fix failing a policy. Sending an already-authenticated
+                   user to /login would hand them a cookie they already have, bounce them
+                   back, and fail again — a redirect loop rather than an explanation. *@
+                @if (context.User.Identity?.IsAuthenticated == true)
+                {
+                    <AdminRequired />
+                }
+                else
+                {
+                    <RedirectToLogin />
+                }
             </NotAuthorized>
             <Authorizing>
                 <MudProgressLinear Indeterminate="true" Color="Color.Primary" />

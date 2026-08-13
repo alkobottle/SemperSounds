@@ -18,6 +18,9 @@ public sealed class SoundboardDbContext(DbContextOptions<SoundboardDbContext> op
     public DbSet<Sound> Sounds => Set<Sound>();
     public DbSet<ActivityLogEntry> ActivityLog => Set<ActivityLogEntry>();
     public DbSet<Favorite> Favorites => Set<Favorite>();
+    public DbSet<EntrySound> EntrySounds => Set<EntrySound>();
+    public DbSet<EntrySoundBlock> EntrySoundBlocks => Set<EntrySoundBlock>();
+    public DbSet<EntrySoundSettings> EntrySoundSettings => Set<EntrySoundSettings>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -74,6 +77,58 @@ public sealed class SoundboardDbContext(DbContextOptions<SoundboardDbContext> op
             // and a slot holds one sound.
             entity.HasIndex(f => new { f.UserId, f.SoundId }).IsUnique();
             entity.HasIndex(f => new { f.UserId, f.Slot }).IsUnique();
+        });
+
+        modelBuilder.Entity<EntrySound>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.UserId).HasConversion<long>();
+            entity.Property(e => e.AssignedAt).HasConversion(UtcTicksConverter);
+
+            // Same reasoning as Favorite: deleting a sound should take everyone's
+            // assignment of it with it rather than leave a pointer at nothing.
+            entity.HasOne(e => e.Sound)
+                .WithMany()
+                .HasForeignKey(e => e.SoundId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // One entry sound per person, enforced in the schema.
+            entity.HasIndex(e => e.UserId).IsUnique();
+        });
+
+        modelBuilder.Entity<EntrySoundBlock>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.UserId).HasConversion<long>();
+            entity.Property(e => e.BlockedByUserId).HasConversion<long>();
+            entity.Property(e => e.Reason).HasMaxLength(200);
+            entity.Property(e => e.BlockedByName).HasMaxLength(100);
+            entity.Property(e => e.BlockedAt).HasConversion(UtcTicksConverter);
+
+            entity.HasIndex(e => e.UserId).IsUnique();
+        });
+
+        modelBuilder.Entity<EntrySoundSettings>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).ValueGeneratedNever();
+            entity.Property(e => e.UpdatedByUserId).HasConversion<long?>();
+            entity.Property(e => e.UpdatedAt).HasConversion(UtcTicksConverter);
+            entity.Property(e => e.SnoozedUntil).HasConversion(UtcTicksConverter);
+
+            entity.ToTable(table =>
+                table.HasCheckConstraint("CK_EntrySoundSettings_Singleton", "Id = 1"));
+
+            // Seeded in the model, not by startup code, so the row exists both after a
+            // migration and after the EnsureCreated() the tests use — which means nothing
+            // anywhere has to handle "settings missing". The timestamp must be a literal:
+            // UtcNow here would make EF report a pending model change on every build.
+            // Qualified because the DbSet property above shadows the type name in here.
+            entity.HasData(new EntrySoundSettings
+            {
+                Id = Data.EntrySoundSettings.SingletonId,
+                UpdatedAt = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero),
+            });
         });
     }
 }

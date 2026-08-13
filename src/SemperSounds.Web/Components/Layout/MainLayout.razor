@@ -28,6 +28,9 @@
                     <div class="d-flex align-center ml-6">
                         <MudButton Href="/board" StartIcon="@Icons.Material.Filled.Apps" Color="Color.Inherit">Board</MudButton>
                         <MudButton Href="/upload" StartIcon="@Icons.Material.Filled.Upload" Color="Color.Inherit">Upload</MudButton>
+                        @* Labelled "Entry" rather than "Entry sound" to keep the fixed width
+                           of this bar inside the md breakpoint. *@
+                        <MudButton Href="/entry-sound" StartIcon="@Icons.Material.Filled.SensorDoor" Color="Color.Inherit">Entry</MudButton>
                         <MudButton Href="/log" StartIcon="@Icons.Material.Filled.History" Color="Color.Inherit">Log</MudButton>
                     </div>
                 </MudHidden>
@@ -40,6 +43,7 @@
                              Class="ml-1">
                         <MudMenuItem Href="/board" Icon="@Icons.Material.Filled.Apps">Board</MudMenuItem>
                         <MudMenuItem Href="/upload" Icon="@Icons.Material.Filled.Upload">Upload</MudMenuItem>
+                        <MudMenuItem Href="/entry-sound" Icon="@Icons.Material.Filled.SensorDoor">Entry sound</MudMenuItem>
                         <MudMenuItem Href="/log" Icon="@Icons.Material.Filled.History">Log</MudMenuItem>
                     </MudMenu>
                 </MudHidden>

@@ -1,0 +1,314 @@
+@page "/admin/entry-sounds"
+@attribute [Authorize(Policy = EntrySoundPolicies.Administrator)]
+@inject EntrySoundLibrary Entries
+@inject EntrySoundAdmin Admin
+@inject SoundLibrary Library
+@inject GuildUserDirectory Users
+@inject ISnackbar Snackbar
+@inject IDialogService Dialogs
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+<PageTitle>Entry sound settings · SemperSounds</PageTitle>
+
+<MudGrid>
+    <MudItem xs="12" md="7">
+        <MudPaper Class="pa-4" Elevation="2">
+            <div class="d-flex align-center gap-2 mb-4">
+                <MudIcon Icon="@Icons.Material.Filled.AdminPanelSettings" Color="Color.Secondary" />
+                <MudText Typo="Typo.h6">Entry sound settings</MudText>
+            </div>
+
+            @if (_loading)
+            {
+                <MudProgressLinear Indeterminate="true" Color="Color.Secondary" />
+            }
+            else
+            {
+                <MudSwitch T="bool"
+                           Value="@_settings.IsEnabled"
+                           ValueChanged="SetEnabled"
+                           Color="Color.Secondary"
+                           Label="Entry sounds are on" />
+
+                <MudDivider Class="my-4" />
+
+                @if (_settings.SnoozedUntil is { } until && until > DateTimeOffset.UtcNow)
+                {
+                    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mb-3">
+                        <div class="d-flex align-center gap-4">
+                            <span>Snoozed until @until.ToLocalTime().ToString("HH:mm").</span>
+                            <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="Resume">
+                                Resume now
+                            </MudButton>
+                        </div>
+                    </MudAlert>
+                }
+                else
+                {
+                    <MudText Typo="Typo.subtitle2" Class="mb-1">Snooze</MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                        Goes quiet and comes back on its own — nobody has to remember to switch it back.
+                    </MudText>
+                    <div class="d-flex flex-wrap gap-2 mt-2">
+                        @foreach (var hours in SnoozeChoices)
+                        {
+                            var chosen = hours;
+                            <MudButton Size="Size.Small"
+                                       Variant="Variant.Outlined"
+                                       StartIcon="@Icons.Material.Filled.Snooze"
+                                       OnClick="@(() => Snooze(chosen))">
+                                @chosen h
+                            </MudButton>
+                        }
+                    </div>
+                }
+
+                <MudDivider Class="my-4" />
+
+                <MudText Typo="Typo.subtitle2">Volume — @_volume%</MudText>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    Entry sounds only. Board presses stay at full volume.
+                </MudText>
+                <div class="d-flex align-center gap-4 mt-2">
+                    <MudSlider T="int" @bind-Value="_volume" Min="0" Max="100" Step="5" Color="Color.Secondary" />
+                    <MudButton Size="Size.Small"
+                               Variant="Variant.Filled"
+                               Color="Color.Secondary"
+                               Disabled="@(_volume == _settings.VolumePercent)"
+                               OnClick="SaveVolume">
+                        Save
+                    </MudButton>
+                </div>
+
+                <MudDivider Class="my-4" />
+
+                <div class="d-flex flex-wrap align-end gap-4">
+                    <MudNumericField T="int" @bind-Value="_cooldown" Min="0" Max="3600"
+                                     Label="Cooldown (seconds)" Variant="Variant.Outlined"
+                                     Margin="Margin.Dense" Style="max-width: 180px;"
+                                     HelperText="0 turns it off" />
+
+                    <MudNumericField T="int" @bind-Value="_maxDurationMs"
+                                     Min="@EntrySoundAdmin.MinDurationMs" Max="@EntrySoundAdmin.MaxDurationMs"
+                                     Step="500"
+                                     Label="Longest entry sound (ms)" Variant="Variant.Outlined"
+                                     Margin="Margin.Dense" Style="max-width: 210px;"
+                                     HelperText="Applies to new picks only" />
+
+                    <MudButton Size="Size.Small"
+                               Variant="Variant.Filled"
+                               Color="Color.Secondary"
+                               Disabled="@(!LimitsChanged)"
+                               OnClick="SaveLimits"
+                               Class="mb-5">
+                        Save
+                    </MudButton>
+                </div>
+
+                @if (_overCap.Count > 0)
+                {
+                    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-3">
+                        <MudText Typo="Typo.body2">
+                            @_overCap.Count existing @(_overCap.Count == 1 ? "pick is" : "picks are")
+                            longer than the current limit and keep playing — the limit only
+                            applies when somebody picks again.
+                        </MudText>
+                        <div class="d-flex flex-wrap gap-2 mt-2">
+                            @foreach (var entry in _overCap)
+                            {
+                                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">
+                                    <UserAvatar UserId="@entry.UserId" Pixels="16" ShowName="false" />
+                                    @entry.Sound?.Name (@((entry.Sound?.DurationMs / 1000.0 ?? 0).ToString("0.0"))s)
+                                </MudChip>
+                            }
+                        </div>
+                    </MudAlert>
+                }
+            }
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" md="5">
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudText Typo="Typo.subtitle1" Class="mb-1">Silenced people</MudText>
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                Everyone else's entry sound keeps working.
+            </MudText>
+
+            @if (_blocks.Count == 0)
+            {
+                <MudText Typo="Typo.body2" Class="mud-text-secondary mt-3">Nobody is silenced.</MudText>
+            }
+            else
+            {
+                <MudList T="string" Dense="true" Class="mt-2">
+                    @foreach (var block in _blocks)
+                    {
+                        <MudListItem T="string">
+                            <div class="d-flex align-center" style="gap: 8px; min-width: 0;">
+                                <UserAvatar UserId="@block.UserId" Pixels="20" />
+                                <div class="flex-grow-1" style="min-width: 0;">
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary ss-truncate">
+                                        @(string.IsNullOrWhiteSpace(block.Reason) ? "no reason given" : block.Reason)
+                                    </MudText>
+                                </div>
+                                <MudTooltip Text="Let them make noise again">
+                                    <MudIconButton Icon="@Icons.Material.Filled.VolumeUp"
+                                                   Size="Size.Small"
+                                                   OnClick="@(() => Unblock(block.UserId))" />
+                                </MudTooltip>
+                            </div>
+                        </MudListItem>
+                    }
+                </MudList>
+            }
+
+            <MudDivider Class="my-3" />
+
+            <MudText Typo="Typo.subtitle2" Class="mb-2">Silence someone</MudText>
+
+            @if (_assignments.Count == 0)
+            {
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                    Nobody has picked an entry sound yet.
+                </MudText>
+            }
+            else
+            {
+                <MudList T="string" Dense="true">
+                    @foreach (var entry in _assignments.Where(e => !_blockedUserIds.Contains(e.UserId)))
+                    {
+                        <MudListItem T="string">
+                            <div class="d-flex align-center" style="gap: 8px; min-width: 0;">
+                                <UserAvatar UserId="@entry.UserId" Pixels="20" />
+                                <MudText Typo="Typo.body2" Class="ss-truncate flex-grow-1">
+                                    @entry.Sound?.Name
+                                </MudText>
+                                <MudTooltip Text="Silence this person's entry sound">
+                                    <MudIconButton Icon="@Icons.Material.Filled.Block"
+                                                   Color="Color.Warning"
+                                                   Size="Size.Small"
+                                                   OnClick="@(() => Block(entry.UserId))" />
+                                </MudTooltip>
+                            </div>
+                        </MudListItem>
+                    }
+                </MudList>
+            }
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+@code {
+    private static readonly int[] SnoozeChoices = [1, 2, 4, 8];
+
+    private EntrySoundSettingsSnapshot _settings;
+    private List<EntrySoundBlock> _blocks = [];
+    private List<EntrySound> _assignments = [];
+    private List<EntrySound> _overCap = [];
+    private HashSet<ulong> _blockedUserIds = [];
+
+    private int _volume;
+    private int _cooldown;
+    private int _maxDurationMs;
+
+    private bool _loading = true;
+    private ulong _userId;
+    private string _userName = string.Empty;
+
+    private bool LimitsChanged =>
+        _cooldown != _settings.PerUserCooldownSeconds || _maxDurationMs != _settings.MaxDurationMs;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        _userId = state.User.GetDiscordUserId();
+        _userName = state.User.GetDisplayName();
+
+        await ReloadAsync();
+        _loading = false;
+    }
+
+    private async Task ReloadAsync()
+    {
+        _settings = await Entries.GetSettingsAsync();
+        _assignments = await Entries.GetAllAsync();
+        _blocks = await Admin.GetBlocksAsync();
+        _blockedUserIds = [.. _blocks.Select(block => block.UserId)];
+
+        _volume = _settings.VolumePercent;
+        _cooldown = _settings.PerUserCooldownSeconds;
+        _maxDurationMs = _settings.MaxDurationMs;
+
+        _overCap = [.. _assignments.Where(e => e.Sound is { } s && s.DurationMs > _settings.MaxDurationMs)];
+    }
+
+    /// <summary>
+    /// Surfaces whatever the service decided. The page never checks permissions itself:
+    /// showing the refusal is how it stays obvious that the service is the rule.
+    /// </summary>
+    private async Task ApplyAsync(Task<EntrySoundResult> action, string success)
+    {
+        var result = await action;
+
+        if (!result.IsSuccess)
+        {
+            Snackbar.Add(result.Error, Severity.Warning);
+        }
+        else
+        {
+            Snackbar.Add(success, Severity.Success);
+        }
+
+        await ReloadAsync();
+    }
+
+    private Task SetEnabled(bool enabled) =>
+        ApplyAsync(Admin.SetEnabledAsync(_userId, enabled),
+            enabled ? "Entry sounds are on" : "Entry sounds are off");
+
+    private Task Snooze(int hours) =>
+        ApplyAsync(Admin.SnoozeAsync(_userId, TimeSpan.FromHours(hours)), $"Quiet for {hours}h");
+
+    private Task Resume() =>
+        ApplyAsync(Admin.ResumeAsync(_userId), "Entry sounds are back");
+
+    private Task SaveVolume() =>
+        ApplyAsync(Admin.SetVolumeAsync(_userId, _volume), $"Volume set to {_volume}%");
+
+    private async Task SaveLimits()
+    {
+        if (_cooldown != _settings.PerUserCooldownSeconds)
+        {
+            await ApplyAsync(Admin.SetCooldownAsync(_userId, _cooldown), "Cooldown saved");
+        }
+
+        if (_maxDurationMs != _settings.MaxDurationMs)
+        {
+            await ApplyAsync(Admin.SetMaxDurationAsync(_userId, _maxDurationMs), "Length limit saved");
+        }
+    }
+
+    private async Task Block(ulong targetUserId)
+    {
+        var name = Users.Resolve(targetUserId).DisplayName;
+
+        var reason = await Dialogs.ShowMessageBoxAsync(
+            "Silence entry sound",
+            $"Stop {name}'s entry sound from playing? Everyone else's keeps working.",
+            yesText: "Silence", cancelText: "Cancel");
+
+        if (reason != true)
+        {
+            return;
+        }
+
+        await ApplyAsync(
+            Admin.BlockAsync(_userId, _userName, targetUserId, $"Silenced by {_userName}"),
+            $"{name} is silenced");
+    }
+
+    private Task Unblock(ulong targetUserId) =>
+        ApplyAsync(Admin.UnblockAsync(_userId, targetUserId),
+            $"{Users.Resolve(targetUserId).DisplayName} can make noise again");
+}

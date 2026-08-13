@@ -27,6 +27,21 @@ public sealed class ActivityLog(SoundboardDbContext db)
             ChannelName = channelName,
         }, cancellationToken);
 
+    /// <summary>An entry sound that fired because <paramref name="userId"/> walked in.</summary>
+    public Task LogEntrySoundAsync(
+        Sound sound, ulong userId, string userName, ulong channelId, string? channelName,
+        CancellationToken cancellationToken = default) =>
+        AppendAsync(new ActivityLogEntry
+        {
+            Kind = SoundboardActivity.EntryPlayed,
+            SoundId = sound.Id,
+            SoundName = sound.Name,
+            UserId = userId,
+            UserName = userName,
+            ChannelId = channelId,
+            ChannelName = channelName,
+        }, cancellationToken);
+
     public Task LogJoinAsync(
         ulong userId, string userName, ulong channelId, string? channelName,
         CancellationToken cancellationToken = default) =>

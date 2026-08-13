@@ -1,0 +1,74 @@
+@* Shown when a signed-in user fails an authorization policy. Distinguishes "you are not an
+   administrator" from "we do not know yet", which the policy itself deliberately does not. *@
+@implements IDisposable
+@inject IGuildPermissions Permissions
+@inject SoundboardEvents Events
+@inject NavigationManager Navigation
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+<MudContainer MaxWidth="MaxWidth.Small" Class="mt-8">
+    @if (_stillLoading)
+    {
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+            <MudText Typo="Typo.subtitle2">Still loading the server's member list</MudText>
+            <MudText Typo="Typo.body2" Class="mt-1">
+                Discord sends it a moment after the bot connects, and your roles cannot be
+                checked until it arrives. This page reloads itself when it does.
+            </MudText>
+            <MudProgressLinear Indeterminate="true" Color="Color.Info" Class="mt-3" />
+        </MudAlert>
+    }
+    else
+    {
+        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+            <MudText Typo="Typo.subtitle2">Administrators only</MudText>
+            <MudText Typo="Typo.body2" Class="mt-1">
+                This page needs the Administrator permission on the Discord server.
+            </MudText>
+        </MudAlert>
+
+        <MudButton Href="/board"
+                   Variant="Variant.Text"
+                   StartIcon="@Icons.Material.Filled.ArrowBack"
+                   Class="mt-4">
+            Back to the board
+        </MudButton>
+    }
+</MudContainer>
+
+@code {
+    private bool _stillLoading;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Raised as guild member chunks arrive, so the answer can change without any
+        // action from the reader.
+        Events.VoiceStateChanged += OnGuildDataChanged;
+
+        await EvaluateAsync();
+    }
+
+    public void Dispose() => Events.VoiceStateChanged -= OnGuildDataChanged;
+
+    private void OnGuildDataChanged() => InvokeAsync(async () =>
+    {
+        var wasLoading = _stillLoading;
+        await EvaluateAsync();
+
+        // Only a genuine change is worth a reload, and only from unknown to known:
+        // re-running authorization is what actually lets them in.
+        if (wasLoading && !_stillLoading)
+        {
+            Navigation.NavigateTo(Navigation.Uri, forceLoad: true);
+            return;
+        }
+
+        StateHasChanged();
+    });
+
+    private async Task EvaluateAsync()
+    {
+        var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        _stillLoading = Permissions.IsAdministrator(state.User.GetDiscordUserId()) is null;
+    }
+}

@@ -43,6 +43,12 @@ public sealed class DiscordBotService : IHostedService, IDisposable
 
     private readonly GatewayReadiness _readiness = new();
 
+    /// <summary>
+    /// Remembers which channel each member was in last, so a voice state update can be
+    /// classified as an arrival rather than a mute. Seeded from GUILD_CREATE.
+    /// </summary>
+    private readonly VoiceTransitionJournal _journal = new();
+
     /// <summary>True once the gateway has identified or resumed and the cache is usable.</summary>
     public bool IsReady => _readiness.IsReady;
 
@@ -91,6 +97,12 @@ public sealed class DiscordBotService : IHostedService, IDisposable
     private ValueTask OnResumeAsync()
     {
         _readiness.MarkResumed();
+
+        // The voice transition journal is deliberately not re-seeded here. RESUMED
+        // re-delivers no voice states, so there is nothing truthful to seed from. The cost
+        // is bounded: somebody who changed channel during the outage may have their next
+        // update read as a move, and one entry sound has to get past "the bot is in that
+        // channel", "somebody else is there" and the cooldown to actually be heard.
         _logger.LogInformation("Discord gateway resumed its session");
         _events.RaiseConnectionChanged();
         return ValueTask.CompletedTask;
@@ -123,6 +135,12 @@ public sealed class DiscordBotService : IHostedService, IDisposable
         _logger.LogInformation(
             "Guild {Name} cached with {VoiceStates} voice states and {Users} users",
             args.Guild.Name, args.Guild.VoiceStates.Count, args.Guild.Users.Count);
+
+        // Priming the journal from the full voice state list is what stops the first update
+        // after every reconnect reading as an arrival for everyone already sitting in voice.
+        _journal.Seed(args.Guild.VoiceStates.Values
+            .Where(state => state.ChannelId is not null)
+            .Select(state => (state.UserId, state.ChannelId!.Value)));
 
         _events.RaiseVoiceStateChanged();
 
@@ -161,11 +179,41 @@ public sealed class DiscordBotService : IHostedService, IDisposable
         return ValueTask.CompletedTask;
     }
 
+    /// <summary>
+    /// Discord sends this for muting, deafening and enabling video as well as for actually
+    /// moving, so the journal is what separates an arrival from a microphone toggle.
+    /// </summary>
     private ValueTask OnVoiceStateUpdateAsync(VoiceState voiceState)
     {
-        if (voiceState.GuildId == _options.GuildId)
+        if (voiceState.GuildId != _options.GuildId)
         {
-            _events.RaiseVoiceStateChanged();
+            return ValueTask.CompletedTask;
+        }
+
+        _events.RaiseVoiceStateChanged();
+
+        // Straight from the payload rather than the cache, so nothing here depends on
+        // whether NetCord applies the update before or after calling this handler.
+        var movement = _journal.Observe(voiceState.UserId, voiceState.ChannelId);
+
+        // The bot's own joins and leaves are voice state updates too. This handler never
+        // filtered them out, which cost nothing while the payload was being discarded.
+        if (!movement.IsArrival || voiceState.UserId == Client.Cache.User?.Id)
+        {
+            return ValueTask.CompletedTask;
+        }
+
+        try
+        {
+            _events.RaiseVoiceMemberArrived(
+                new VoiceArrival(movement.UserId, movement.ToChannelId!.Value));
+        }
+        catch (Exception ex)
+        {
+            // The first of these events with a subscriber that does real work. Raises are
+            // synchronous on the gateway callback thread, so an unguarded throw here would
+            // take the gateway handler down with it.
+            _logger.LogWarning(ex, "An entry sound subscriber threw");
         }
 
         return ValueTask.CompletedTask;
