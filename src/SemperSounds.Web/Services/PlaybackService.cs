@@ -4,6 +4,7 @@ using NetCord.Gateway;
 using NetCord.Gateway.Voice;
 using SemperSounds.Core.Audio;
 using SemperSounds.Core.Configuration;
+using SemperSounds.Core.Data;
 using SemperSounds.Core.EntrySounds;
 using SemperSounds.Core.Sounds;
 
@@ -224,7 +225,7 @@ public sealed class PlaybackService(
         await LogActivityAsync(log => log.LogPlayAsync(sound, userId, userName, channelId, channelName));
 
         events.RaiseSoundPlayed(new SoundPlayedNotification(
-            sound.Id, sound.Name, userId, userName, DateTimeOffset.UtcNow));
+            sound.Id, sound.Name, userId, userName, DateTimeOffset.UtcNow, SoundboardActivity.Played));
 
         return PlaybackResult.Ok;
     }
@@ -295,8 +296,9 @@ public sealed class PlaybackService(
 
         // Reusing SoundPlayed rather than adding an entry-specific notification: every new
         // subscription is another handler a component can leak and pin its circuit with.
+        // The kind is what keeps subscribers from counting this as a button press.
         events.RaiseSoundPlayed(new SoundPlayedNotification(
-            sound.Id, sound.Name, userId, userName, DateTimeOffset.UtcNow));
+            sound.Id, sound.Name, userId, userName, DateTimeOffset.UtcNow, SoundboardActivity.EntryPlayed));
 
         return PlaybackResult.Ok;
     }

@@ -37,5 +37,29 @@ window.semperSounds = {
             document.removeEventListener('keydown', window.semperSounds._hotkeyHandler);
             window.semperSounds._hotkeyHandler = null;
         }
+    },
+
+    /**
+     * Reads a stored preference, or null when there is none.
+     *
+     * The try/catch is not decoration: Safari in private mode and some cookie-blocking
+     * setups throw on localStorage access rather than returning nothing, and an unhandled
+     * exception coming back through interop surfaces as a dead circuit. Returning null
+     * makes C# treat it as a first visit, which is the right answer either way.
+     */
+    getPreference: function (key) {
+        try {
+            return localStorage.getItem(key);
+        } catch {
+            return null;
+        }
+    },
+
+    setPreference: function (key, value) {
+        try {
+            localStorage.setItem(key, value);
+        } catch {
+            // Storage being unavailable costs the viewer a saved preference, nothing more.
+        }
     }
 };

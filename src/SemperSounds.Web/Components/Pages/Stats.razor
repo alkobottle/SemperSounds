@@ -1,0 +1,221 @@
+@page "/stats"
+@attribute [Authorize]
+@inject PlayStatistics Statistics
+@inject SoundLibrary Library
+
+<PageTitle>Stats · SemperSounds</PageTitle>
+
+<div class="d-flex align-center gap-2 mb-4">
+    <MudIcon Icon="@Icons.Material.Filled.Leaderboard" Color="Color.Primary" />
+    <MudText Typo="Typo.h6">Soundboard stats</MudText>
+    <MudSpacer />
+    @* Loaded once and refreshed on request. Subscribing to SoundPlayed would re-run four
+       aggregates per press per open tab — and with no subscription this page also has no
+       handler to leak and cannot pin a circuit. *@
+    <MudTooltip Text="Reload">
+        <MudIconButton Icon="@Icons.Material.Filled.Refresh"
+                       Disabled="_loading"
+                       OnClick="ReloadAsync" />
+    </MudTooltip>
+</div>
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudGrid Class="mb-2">
+        @foreach (var (label, value) in Headlines)
+        {
+            <MudItem xs="6" md="3">
+                <MudPaper Class="pa-4" Elevation="2">
+                    <MudText Typo="Typo.h5">@value</MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@label</MudText>
+                </MudPaper>
+            </MudItem>
+        }
+    </MudGrid>
+
+    <MudGrid>
+        <MudItem xs="12" md="7">
+            <MudPaper Class="pa-4" Elevation="2">
+                <div class="d-flex align-center flex-wrap gap-2 mb-2">
+                    <MudText Typo="Typo.subtitle1">Plays per day</MudText>
+                    <MudSpacer />
+                    <MudButtonGroup Size="Size.Small" Variant="Variant.Outlined">
+                        @foreach (var window in WindowChoices)
+                        {
+                            var choice = window;
+                            <MudButton Color="@(_days == choice ? Color.Primary : Color.Default)"
+                                       OnClick="@(() => ChangeWindowAsync(choice))">
+                                @choice d
+                            </MudButton>
+                        }
+                    </MudButtonGroup>
+                </div>
+
+                @if (_series[0].Data.Values.Sum() == 0)
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                        Nothing played in this window.
+                    </MudText>
+                }
+                else
+                {
+                    <MudChart T="double"
+                              ChartType="ChartType.Bar"
+                              ChartSeries="_series"
+                              ChartLabels="_labels"
+                              Height="280px" />
+                }
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12" md="5">
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudText Typo="Typo.subtitle1" Class="mb-3">Most active</MudText>
+
+                @if (_topUsers.Count == 0)
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Nobody yet.</MudText>
+                }
+                else
+                {
+                    @* A bar list rather than a pie: it needs no chart at all, ranks by
+                       length instead of by angle, and stays readable at 414px. *@
+                    @foreach (var user in _topUsers)
+                    {
+                        <div class="mb-3">
+                            <div class="d-flex align-center mb-1" style="gap: 8px; min-width: 0;">
+                                <UserAvatar UserId="@user.UserId" FallbackName="@user.UserName" Pixels="20" />
+                                <MudSpacer />
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary">@user.Plays</MudText>
+                            </div>
+                            <MudProgressLinear Color="Color.Primary"
+                                               Rounded="true"
+                                               Size="Size.Small"
+                                               Value="@Share(user.Plays)" />
+                        </div>
+                    }
+                }
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12">
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudText Typo="Typo.subtitle1" Class="mb-2">Most played</MudText>
+
+                @if (_topSounds.Count == 0)
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                        Nothing has been played yet.
+                    </MudText>
+                }
+                else
+                {
+                    <MudTable Items="_topSounds" Dense="true" Hover="true" Elevation="0">
+                        <HeaderContent>
+                            <MudTh Style="width: 3rem;">#</MudTh>
+                            <MudTh>Sound</MudTh>
+                            <MudTh Style="width: 6rem;">Plays</MudTh>
+                            <MudTh Style="width: 12rem;">Last played</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd>@(_topSounds.IndexOf(context) + 1)</MudTd>
+                            <MudTd>
+                                <div class="d-flex align-center" style="gap: 8px; min-width: 0;">
+                                    @if (!context.IsDeleted)
+                                    {
+                                        <SoundEmojiView Value="@context.Emoji" Size="20" />
+                                    }
+                                    <span class="@(context.IsDeleted ? "mud-text-secondary" : "")">
+                                        @context.SoundName
+                                    </span>
+                                    @if (context.IsDeleted)
+                                    {
+                                        @* Kept rather than dropped: the log has no foreign key so
+                                           this history is deliberate, and hiding it would make the
+                                           totals above stop adding up. *@
+                                        <MudText Typo="Typo.caption" Class="mud-text-secondary">(deleted)</MudText>
+                                    }
+                                </div>
+                            </MudTd>
+                            <MudTd>@context.Plays</MudTd>
+                            <MudTd Class="mud-text-secondary">
+                                @(context.LastPlayedAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm") ?? "—")
+                            </MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                }
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+}
+
+@code {
+    private static readonly int[] WindowChoices = [7, 14, 30];
+
+    private List<TopSound> _topSounds = [];
+    private IReadOnlyList<TopUser> _topUsers = [];
+    private IReadOnlyList<PlaysOnDay> _perDay = [];
+
+    private List<ChartSeries<double>> _series = [new() { Name = "Plays", Data = new double[] { 0 } }];
+    private string[] _labels = [""];
+
+    private int _totalPlays;
+    private int _soundCount;
+
+    /// <summary>Fourteen days by default: thirty bars is unreadable on a phone.</summary>
+    private int _days = 14;
+
+    private bool _loading = true;
+
+    private (string Label, string Value)[] Headlines =>
+    [
+        ("plays all time", _totalPlays.ToString()),
+        ("plays this week", _perDay.TakeLast(7).Sum(day => day.Plays).ToString()),
+        ("sounds", _soundCount.ToString()),
+        ("top presser", _topUsers.Count == 0 ? "—" : _topUsers[0].Plays.ToString()),
+    ];
+
+    protected override Task OnInitializedAsync() => ReloadAsync();
+
+    private async Task ChangeWindowAsync(int days)
+    {
+        _days = days;
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        _loading = true;
+
+        _totalPlays = await Statistics.GetTotalPlaysAsync();
+        _topSounds = [.. await Statistics.GetTopSoundsAsync(10)];
+        _topUsers = await Statistics.GetTopUsersAsync(8);
+        _perDay = await Statistics.GetPlaysPerDayAsync(_days);
+        _soundCount = (await Library.GetAllAsync()).Count;
+
+        // Data takes a double[] through an implicit conversion; ChartSeries<T> and MudChart<T>
+        // are both generic in MudBlazor 9, unlike every v8 sample you will find.
+        _series = [new ChartSeries<double>
+        {
+            Name = "Plays",
+            Data = _perDay.Select(day => (double)day.Plays).ToArray(),
+        }];
+
+        // Thirty labels collide into mush, so only every few days is named; the tooltip
+        // carries the exact value for the rest.
+        var step = _perDay.Count > 14 ? 5 : _perDay.Count > 7 ? 2 : 1;
+        _labels = [.. _perDay.Select((day, index) =>
+            index % step == 0 ? day.Day.ToString("dd.MM") : string.Empty)];
+
+        _loading = false;
+    }
+
+    private double Share(int plays) =>
+        _topUsers.Count == 0 || _topUsers[0].Plays == 0
+            ? 0
+            : plays * 100.0 / _topUsers[0].Plays;
+}

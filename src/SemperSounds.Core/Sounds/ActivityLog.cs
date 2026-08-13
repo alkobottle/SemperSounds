@@ -9,7 +9,9 @@ namespace SemperSounds.Core.Sounds;
 /// </summary>
 /// <remarks>
 /// Separate from <see cref="SoundLibrary"/>, which already owns uploading, deletion, tags
-/// and PCM reading. The log only ever appends and reads back newest-first.
+/// and PCM reading. This class only ever appends and reads back newest-first; grouped reads
+/// over the same table — play counts, top sounds, plays per day — live in
+/// <c>PlayStatistics</c>, which is why the table now carries a second index.
 /// </remarks>
 public sealed class ActivityLog(SoundboardDbContext db)
 {

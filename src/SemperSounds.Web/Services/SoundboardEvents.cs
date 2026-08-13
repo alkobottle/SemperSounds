@@ -1,8 +1,17 @@
+using SemperSounds.Core.Data;
+
 namespace SemperSounds.Web.Services;
 
 /// <param name="SoundName">Name at the time of playing, so the entry reads correctly later.</param>
+/// <param name="Kind">
+/// Played for a button press, EntryPlayed for somebody walking into voice. Deliberately has
+/// no default: there are exactly two places that raise this, and a default would let a future
+/// third play path count silently as a press — the mistake EntryPlayed exists to prevent.
+/// It is what lets a subscriber keep a play count current without re-running the aggregate.
+/// </param>
 public readonly record struct SoundPlayedNotification(
-    Guid SoundId, string SoundName, ulong UserId, string UserName, DateTimeOffset PlayedAt);
+    Guid SoundId, string SoundName, ulong UserId, string UserName, DateTimeOffset PlayedAt,
+    SoundboardActivity Kind);
 
 /// <param name="ChannelId">The channel they are in now.</param>
 public readonly record struct VoiceArrival(ulong UserId, ulong ChannelId);

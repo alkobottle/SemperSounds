@@ -11,6 +11,7 @@ using SemperSounds.Core.Configuration;
 using SemperSounds.Core.Data;
 using SemperSounds.Core.EntrySounds;
 using SemperSounds.Core.Sounds;
+using SemperSounds.Core.Statistics;
 using SemperSounds.Web.Components;
 using SemperSounds.Web.Services;
 
@@ -60,6 +61,7 @@ builder.Services.AddScoped<UploadValidator>();
 builder.Services.AddScoped<SoundLibrary>();
 builder.Services.AddScoped<FavoriteLibrary>();
 builder.Services.AddScoped<ActivityLog>();
+builder.Services.AddScoped<PlayStatistics>();
 builder.Services.AddScoped<EntrySoundLibrary>();
 builder.Services.AddScoped<EntrySoundAdmin>();
 

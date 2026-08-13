@@ -31,7 +31,15 @@
                         @* Labelled "Entry" rather than "Entry sound" to keep the fixed width
                            of this bar inside the md breakpoint. *@
                         <MudButton Href="/entry-sound" StartIcon="@Icons.Material.Filled.SensorDoor" Color="Color.Inherit">Entry</MudButton>
-                        <MudButton Href="/log" StartIcon="@Icons.Material.Filled.History" Color="Color.Inherit">Log</MudButton>
+                        @* Stats and Log share a menu rather than each taking a slot: this bar
+                           already needs ~690px of fixed content and a fifth button wraps it. *@
+                        <MudMenu Icon="@Icons.Material.Filled.History"
+                                 Label="History"
+                                 Color="Color.Inherit"
+                                 Dense="true">
+                            <MudMenuItem Href="/log" Icon="@Icons.Material.Filled.History">Log</MudMenuItem>
+                            <MudMenuItem Href="/stats" Icon="@Icons.Material.Filled.Leaderboard">Stats</MudMenuItem>
+                        </MudMenu>
                     </div>
                 </MudHidden>
 
@@ -45,6 +53,7 @@
                         <MudMenuItem Href="/upload" Icon="@Icons.Material.Filled.Upload">Upload</MudMenuItem>
                         <MudMenuItem Href="/entry-sound" Icon="@Icons.Material.Filled.SensorDoor">Entry sound</MudMenuItem>
                         <MudMenuItem Href="/log" Icon="@Icons.Material.Filled.History">Log</MudMenuItem>
+                        <MudMenuItem Href="/stats" Icon="@Icons.Material.Filled.Leaderboard">Stats</MudMenuItem>
                     </MudMenu>
                 </MudHidden>
 

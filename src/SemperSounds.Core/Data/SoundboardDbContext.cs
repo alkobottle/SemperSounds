@@ -56,8 +56,15 @@ public sealed class SoundboardDbContext(DbContextOptions<SoundboardDbContext> op
             entity.Property(e => e.ChannelId).HasConversion<long>();
             entity.Property(e => e.OccurredAt).HasConversion(UtcTicksConverter);
 
-            // The log is read newest-first and nothing else.
+            // The log page and the home panel read it newest-first.
             entity.HasIndex(e => e.OccurredAt);
+
+            // Play statistics group it instead. Kind leads because every one of those queries
+            // opens "where Kind = Played", so joins, leaves and entry sounds are skipped
+            // outright; SoundId turns the grouping into an ordered index scan rather than a
+            // temporary B-tree; and OccurredAt last makes the index covering, so counts and
+            // last-played are answered without reading a single table row.
+            entity.HasIndex(e => new { e.Kind, e.SoundId, e.OccurredAt });
         });
 
         modelBuilder.Entity<Favorite>(entity =>

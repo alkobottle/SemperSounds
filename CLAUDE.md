@@ -187,6 +187,81 @@ asynchronously from `GuildUserChunk` seconds after every restart, so a null answ
 known yet". The policy fails closed on it; `AdminRequired` tells the two apart for the reader
 and reloads once the member list lands.
 
+### Play counts are derived, never stored
+
+`PlayStatistics` (`Core/Statistics/`) aggregates the activity log; there is deliberately no
+`PlayCount` column on `Sound`. A stored counter could not be retroactive without a backfill,
+would drift every time a log write is swallowed — which `PlaybackService.LogActivityAsync`
+does on purpose — and could answer no question about a time window. Deriving it also means
+the numbers were meaningful the day the feature shipped, because
+`RenamePlayLogToActivityLog` carried the old rows across.
+
+Counts are **presses only** (`SoundboardActivity.Played`), never `EntryPlayed`: one person
+rejoining voice forty times must not make their clip look popular. A consequence worth
+knowing is that a sound whose only history is entry sounds shows as *never played*.
+
+Two things this rests on, both pinned by tests because neither is obvious:
+
+- `OccurredAt` goes through `UtcTicksConverter`, so `MAX(OccurredAt)` needs that converter
+  applied **in reverse** on materialisation. When that half-works the result is not an
+  exception, it is a year-0001 timestamp — a green build and a rendered page that quietly
+  lies. `PerSoundStats_AggregateInSql_AgainstRealSqlite` pins it.
+- `PerSoundStats_RunsInSqlRatherThanInMemory` asserts on `ToQueryString()`. A correct result
+  says nothing about *where* it was computed: adding `.AsEnumerable()` makes any translation
+  error disappear while dragging the whole log into memory on every board load.
+
+Aggregates group by `SoundId`, **never by the denormalized `SoundName`** — anyone can rename
+a sound, and grouping by name splits one clip into two rows the moment they do. Deleted
+sounds stay in the rankings, flagged: the log holds no foreign key precisely so history
+outlives a deletion, and dropping them would make the totals stop adding up.
+
+`GetPlaysPerDayAsync` is the one aggregate that reads rows into memory, because SQLite cannot
+bucket UTC ticks into days. It is bounded by a `>= since` clause, so it is O(plays in the
+window) rather than O(table) — which is what makes it acceptable there and nowhere else.
+
+`SoundPlayedNotification` carries a `Kind` so a subscriber can keep a count current without
+re-running the aggregate: plays are bursty by design and every open circuit subscribes, so
+re-querying per press would be a query storm. It has **no default value** — there are exactly
+two places that raise it, and a default would let a future third play path count silently as
+a press.
+
+### Board sorting and filtering lives outside the page
+
+`BoardView.Apply` (`Web/BoardPreferences.cs`) is a pure static function, not logic inside
+`Home.razor`. There is no bUnit in this solution, so anything left in the page is untestable —
+and the rules here are exactly the sort that break quietly.
+
+**Every sort arm needs its name tiebreak.** That is not defensive padding: the bulk importer
+stamps every clip it creates with the same `UploadedAt`, so "recently uploaded" is mostly
+ties, and most of the library has never been played, so "most played" is one large tie along
+the bottom. Without it the order there is arbitrary and shifts between renders.
+
+Sorting in memory with `OrdinalIgnoreCase` deliberately differs from the old
+`GetAllAsync` ordering: SQLite's default BINARY collation put every capital before every
+lowercase letter, so "Zebra" sorted above "apple".
+
+The favourites strip is **not** sorted or filtered. It renders from `Slot`, and `OnHotkey`
+looks up by `Slot`, so a key keeps meaning one sound — the same reason search never touched it.
+
+Preferences persist in `localStorage` under one versioned key. Snowflakes are stored **as
+strings**: a Discord id exceeds `Number.MAX_SAFE_INTEGER`, and as a JSON number any
+`JSON.parse` rounds it silently so the uploader filter matches nobody. Enums are stored by
+name so renumbering cannot repoint a saved choice. `BoardPreferencesJson.Deserialize` never
+throws — it runs in `OnAfterRenderAsync`, where an escaping exception kills the circuit.
+Reading it there rather than in `OnInitializedAsync` is forced by prerendering, which has no
+JS runtime; the cost is a brief flash of the default board.
+
+### MudBlazor 9 charts are generic, and Data is not an array
+
+Both changed from v8, so every sample online fails to compile — the same trap as
+`ShowMessageBox` → `ShowMessageBoxAsync`. Verified by reflection over the shipped 9.8.0
+assembly:
+
+- `MudChart<T>` and `ChartSeries<T>` are **generic** (`<MudChart T="double" …>`).
+- `ChartSeries<T>.Data` is a `ChartData<T>`, not `T[]`. A `double[]` works only through an
+  implicit conversion.
+- `ChartSeries` on the chart is `List<ChartSeries<double>>`; `ChartLabels` is `string[]`.
+
 ### There is no Bootstrap
 
 It was removed during scaffolding, so `text-truncate`, `text-center` and friends are
@@ -223,8 +298,8 @@ GatewayClient → DiscordBotService → VoiceTransitionJournal → SoundboardEve
 
 `DiscordBotService`, `VoiceStateTracker`, `PlaybackService`, `SoundboardEvents`,
 `EntrySoundCoordinator` and `GuildPermissionProvider` are
-**singletons**. `SoundboardDbContext`, `SoundLibrary`, `EntrySoundLibrary`, `EntrySoundAdmin`
-and the ffmpeg wrappers are
+**singletons**. `SoundboardDbContext`, `SoundLibrary`, `EntrySoundLibrary`, `EntrySoundAdmin`,
+`PlayStatistics` and the ffmpeg wrappers are
 **scoped**. A singleton must therefore reach the library through `IServiceScopeFactory` —
 see `PlaybackService.PlayAsync`. Injecting `SoundLibrary` into a singleton directly will
 capture a disposed context.

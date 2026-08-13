@@ -1,0 +1,93 @@
+@inject PlayStatistics Statistics
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3" Style="min-width: 340px;">
+            <div class="d-flex align-center" style="gap: 12px;">
+                <SoundEmojiView Value="@Sound.Emoji" Size="40" />
+                <div style="min-width: 0;">
+                    <MudText Typo="Typo.subtitle1" Class="ss-truncate" title="@Sound.Name">
+                        @Sound.Name
+                    </MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                        @((Sound.DurationMs / 1000.0).ToString("0.0"))s
+                    </MudText>
+                </div>
+            </div>
+
+            <MudDivider />
+
+            @if (_loading)
+            {
+                <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+            }
+            else if (_detail.Plays == 0)
+            {
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                    Never played. Nobody has pressed this one yet.
+                </MudText>
+            }
+            else
+            {
+                <div class="d-flex flex-wrap" style="gap: 24px;">
+                    <div>
+                        <MudText Typo="Typo.h6">@_detail.Plays</MudText>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                            @(_detail.Plays == 1 ? "play" : "plays")
+                        </MudText>
+                    </div>
+                    <div>
+                        <MudText Typo="Typo.h6">@_detail.PlaysThisWeek</MudText>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">this week</MudText>
+                    </div>
+                </div>
+
+                @if (_detail.TopPlayer is { } top)
+                {
+                    @* Who presses it most lives behind a click, never on the tile: it is the
+                       one number here that attributes behaviour to a named person. *@
+                    <div class="d-flex align-center" style="gap: 8px;">
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">Played most by</MudText>
+                        <UserAvatar UserId="@top.UserId" FallbackName="@top.UserName" Pixels="20" />
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">(@top.Plays)</MudText>
+                    </div>
+                }
+
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                    Last played @Describe(_detail.LastPlayedAt), first @Describe(_detail.FirstPlayedAt).
+                </MudText>
+            }
+
+            <MudDivider />
+
+            <div class="d-flex align-center" style="gap: 8px;">
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">Uploaded by</MudText>
+                <UserAvatar UserId="@Sound.UploaderId" FallbackName="@Sound.UploaderName" Pixels="20" />
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                    on @Sound.UploadedAt.ToLocalTime().ToString("yyyy-MM-dd")
+                </MudText>
+            </div>
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => Dialog.Close())">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = default!;
+
+    [Parameter, EditorRequired] public Sound Sound { get; set; } = default!;
+
+    private SoundPlayDetail _detail;
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _detail = await Statistics.GetForSoundAsync(Sound.Id);
+        _loading = false;
+    }
+
+    private static string Describe(DateTimeOffset? when) =>
+        when is null ? "never" : when.Value.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
+}

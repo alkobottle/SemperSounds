@@ -7,6 +7,7 @@
    namespace, which _Imports pulls into scope. *@
 @inject EntrySoundLibrary Entries
 @inject ActivityLog Activity
+@inject PlayStatistics Statistics
 @inject PlaybackService Playback
 @inject SoundboardEvents Events
 @inject ISnackbar Snackbar
@@ -79,9 +80,11 @@
             <MudDivider Class="mb-4" />
         }
 
-        <div class="d-flex align-center gap-4 mb-4">
+        @* flex-wrap because this row now carries search, sort and uploader: without it they
+           are squeezed rather than stacked at 414px. *@
+        <div class="d-flex align-center flex-wrap gap-4 mb-4">
             <MudTextField @bind-Value="_search"
-                          @bind-Value:after="ApplyFilter"
+                          @bind-Value:after="ApplyView"
                           Immediate="true"
                           Placeholder="Search sounds..."
                           Adornment="Adornment.Start"
@@ -89,9 +92,69 @@
                           Variant="Variant.Outlined"
                           Margin="Margin.Dense"
                           Clearable="true" />
+
+            <MudSelect T="BoardSort"
+                       Value="_preferences.Sort"
+                       ValueChanged="SortChanged"
+                       Label="Sort"
+                       Variant="Variant.Outlined"
+                       Margin="Margin.Dense"
+                       Dense="true"
+                       Style="max-width: 190px;"
+                       Class="flex-shrink-0">
+                @foreach (var sort in Enum.GetValues<BoardSort>())
+                {
+                    <MudSelectItem T="BoardSort" Value="@sort">@SortLabel(sort)</MudSelectItem>
+                }
+            </MudSelect>
+
+            @if (_uploaders.Count > 1)
+            {
+                <MudSelect T="ulong?"
+                           Value="_preferences.UploaderId"
+                           ValueChanged="UploaderChanged"
+                           Label="Uploader"
+                           Variant="Variant.Outlined"
+                           Margin="Margin.Dense"
+                           Dense="true"
+                           Clearable="true"
+                           Style="max-width: 190px;"
+                           Class="flex-shrink-0">
+                    <MudSelectItem T="ulong?" Value="@((ulong?)null)">Anyone</MudSelectItem>
+                    @foreach (var uploader in _uploaders)
+                    {
+                        <MudSelectItem T="ulong?" Value="@((ulong?)uploader.Id)">
+                            @uploader.Name (@uploader.Count)
+                        </MudSelectItem>
+                    }
+                </MudSelect>
+            }
+
+            @* Kept, and now doing more work than before: with a sort and four filters there
+               are more ways to be looking at a subset than there used to be. *@
             <MudText Typo="Typo.body2" Class="mud-text-secondary flex-shrink-0">
                 @_filtered.Count / @_all.Count
             </MudText>
+        </div>
+
+        <div class="d-flex align-center flex-wrap gap-2 mb-4">
+            <MudChipSet T="BoardFilter"
+                        @bind-SelectedValues="_selectedFilters"
+                        @bind-SelectedValues:after="FiltersChanged"
+                        SelectionMode="SelectionMode.MultiSelection"
+                        CheckMark="true">
+                @foreach (var (filter, label, icon) in FilterChips)
+                {
+                    <MudChip T="BoardFilter"
+                             Value="@filter"
+                             Icon="@icon"
+                             Size="Size.Small"
+                             Color="Color.Secondary"
+                             Variant="@(_selectedFilters.Contains(filter) ? Variant.Filled : Variant.Outlined)">
+                        @label
+                    </MudChip>
+                }
+            </MudChipSet>
         </div>
 
         @if (_allTags.Count > 0)
@@ -103,7 +166,7 @@
             <div class="d-flex align-center flex-wrap gap-2 mb-4">
                 <MudChipSet T="string"
                             @bind-SelectedValues="_selectedTags"
-                            @bind-SelectedValues:after="ApplyFilter"
+                            @bind-SelectedValues:after="TagsChanged"
                             SelectionMode="SelectionMode.MultiSelection"
                             CheckMark="true">
                     @foreach (var tag in _allTags)
@@ -169,6 +232,32 @@
                                         <UserAvatar UserId="@sound.UploaderId"
                                                     FallbackName="@sound.UploaderName"
                                                     Pixels="16" />
+
+                                        @* The play count lives here rather than getting its own row or
+                                           chip: the tile's action row is already four buttons wide inside
+                                           an xs=6 column and wraps at 414px. Nothing renders at zero —
+                                           most of the library sits there and "0" is just noise. It is
+                                           also the way into the detail dialog, so that costs no button. *@
+                                        @if (_stats.TryGetValue(sound.Id, out var stats) && stats.Plays > 0)
+                                        {
+                                            <span>·</span>
+                                            @* Trending swaps this icon rather than adding a badge:
+                                               one glyph, no extra control, no layout change. *@
+                                            <MudTooltip Text="@(stats.IsTrending
+                                                                  ? $"Trending — {stats.PlaysThisWeek} plays this week, up from {stats.PlaysPreviousWeek}"
+                                                                  : "Play history")">
+                                                <span class="d-inline-flex align-center"
+                                                      style="gap: 3px; cursor: pointer;"
+                                                      @onclick="@(() => ShowStats(sound))">
+                                                    <MudIcon Icon="@(stats.IsTrending
+                                                                       ? Icons.Material.Filled.LocalFireDepartment
+                                                                       : Icons.Material.Filled.PlayArrow)"
+                                                             Color="@(stats.IsTrending ? Color.Warning : Color.Inherit)"
+                                                             Size="Size.Small" />
+                                                    <span>@stats.Plays</span>
+                                                </span>
+                                            </MudTooltip>
+                                        }
                                     </MudText>
                                 </div>
 
@@ -269,6 +358,32 @@
     private IReadOnlyCollection<string> _selectedTags = [];
     private List<ActivityLogEntry> _recent = [];
 
+    /// <summary>
+    /// Play counts by sound. A missing key means never played — the aggregate omits those
+    /// rather than returning zeros.
+    /// </summary>
+    private Dictionary<Guid, SoundPlayStats> _stats = [];
+
+    /// <summary>
+    /// How the grid is ordered and narrowed. The tag chips keep their own binding for
+    /// MudChipSet's sake and are folded in when the view is rebuilt.
+    /// </summary>
+    private BoardPreferences _preferences = new();
+
+    /// <summary>Bound to the chip set, then folded into <see cref="_preferences"/> as flags.</summary>
+    private IReadOnlyCollection<BoardFilter> _selectedFilters = [];
+
+    /// <summary>Derived from the library the same way the tag list is, so no extra query
+    /// and only people who actually have sounds appear.</summary>
+    private List<(ulong Id, string Name, int Count)> _uploaders = [];
+
+    private static readonly (BoardFilter Filter, string Label, string Icon)[] FilterChips =
+    [
+        (BoardFilter.FavouritesOnly, "Favourites", Icons.Material.Filled.Star),
+        (BoardFilter.NeverPlayed, "Never played", Icons.Material.Filled.HistoryToggleOff),
+        (BoardFilter.Untagged, "Untagged", Icons.Material.Filled.LabelOff),
+    ];
+
     private string _search = string.Empty;
     private bool _loading = true;
     private bool _canPlay;
@@ -347,47 +462,92 @@
     private async Task ReloadAsync()
     {
         _all = await Library.GetAllAsync();
+        _stats = new Dictionary<Guid, SoundPlayStats>(await Statistics.GetPerSoundAsync());
         await ReloadFavoritesAsync();
         _allTags = [.. _all.SelectMany(s => s.TagList).Distinct().OrderBy(t => t)];
-        ApplyFilter();
+        RebuildUploaders();
+        ApplyView();
 
         _recent = await Activity.GetRecentAsync(15);
     }
 
     /// <summary>MudChipSet has no clear API; reassigning the bound field deselects them.</summary>
-    private void ClearTagFilter()
+    private Task ClearTagFilter()
     {
         _selectedTags = [];
-        ApplyFilter();
+        return TagsChanged();
     }
 
-    private void ApplyFilter()
+    /// <summary>
+    /// Named ApplyView, not ApplyFilter: it sorts as well now, and a method whose name has
+    /// stopped describing what it does is how the next person gets misled.
+    /// </summary>
+    private void ApplyView() =>
+        _filtered = BoardView.Apply(_all, _preferences, _search, _favoriteIds, _stats);
+
+    // Only deliberate mode changes persist. The search box calls ApplyView directly, so a
+    // sticky search term is impossible and nothing writes to storage per keystroke.
+
+    private Task SortChanged(BoardSort sort)
     {
-        IEnumerable<Sound> query = _all;
-
-        if (!string.IsNullOrWhiteSpace(_search))
-        {
-            var term = _search.Trim();
-
-            // Matching the custom emoji's name is what makes emoji findable at all:
-            // you cannot type :kekw: into the box, but you can type "kekw".
-            query = query.Where(s =>
-                s.Name.Contains(term, StringComparison.OrdinalIgnoreCase) ||
-                s.Tags.Contains(term, StringComparison.OrdinalIgnoreCase) ||
-                EmojiMatches(s.Emoji, term));
-        }
-
-        if (_selectedTags.Count > 0)
-        {
-            query = query.Where(s => _selectedTags.All(tag => s.TagList.Contains(tag)));
-        }
-
-        _filtered = [.. query];
+        _preferences = _preferences with { Sort = sort };
+        ApplyView();
+        return SavePreferencesAsync();
     }
 
-    private static bool EmojiMatches(string stored, string term) =>
-        SoundEmoji.TryParse(stored, out var emoji) &&
-        emoji.SearchText.Contains(term, StringComparison.OrdinalIgnoreCase);
+    private Task UploaderChanged(ulong? uploaderId)
+    {
+        _preferences = _preferences with { UploaderId = uploaderId };
+        ApplyView();
+        return SavePreferencesAsync();
+    }
+
+    private Task TagsChanged()
+    {
+        _preferences = _preferences with { Tags = [.. _selectedTags] };
+        ApplyView();
+        return SavePreferencesAsync();
+    }
+
+    private Task FiltersChanged()
+    {
+        var flags = BoardFilter.None;
+        foreach (var filter in _selectedFilters)
+        {
+            flags |= filter;
+        }
+
+        _preferences = _preferences with { Filters = flags };
+        ApplyView();
+        return SavePreferencesAsync();
+    }
+
+    /// <summary>
+    /// Uploaders present in the library, most prolific first. Rebuilt wherever the tag list
+    /// is, because both go stale for the same reasons.
+    /// </summary>
+    private void RebuildUploaders() =>
+        _uploaders =
+        [
+            .. _all
+                .GroupBy(s => s.UploaderId)
+                .Select(group => (
+                    Id: group.Key,
+                    Name: group.First().UploaderName,
+                    Count: group.Count()))
+                .OrderByDescending(uploader => uploader.Count)
+                .ThenBy(uploader => uploader.Name, StringComparer.OrdinalIgnoreCase)
+        ];
+
+    private static string SortLabel(BoardSort sort) => sort switch
+    {
+        BoardSort.MostPlayed => "Most played",
+        BoardSort.RecentlyUploaded => "Newest",
+        BoardSort.RecentlyPlayed => "Recently played",
+        BoardSort.Longest => "Longest",
+        BoardSort.Shortest => "Shortest",
+        _ => "A–Z",
+    };
 
     private void UpdateCanPlay() =>
         _canPlay = Playback.IsConnected;
@@ -419,6 +579,12 @@
         }
     }
 
+    private Task ShowStats(Sound sound)
+    {
+        var parameters = new DialogParameters<SoundStatsDialog> { { x => x.Sound, sound } };
+        return Dialogs.ShowAsync<SoundStatsDialog>("Play history", parameters);
+    }
+
     private async Task Preview(Sound sound) =>
         await JS.InvokeVoidAsync("semperSounds.preview", _previewPlayer, $"/sounds/{sound.Id}/preview");
 
@@ -443,19 +609,48 @@
 
     private void OnSoundPlayed(SoundPlayedNotification notification) => InvokeAsync(async () =>
     {
-        // Re-read rather than splicing the notification in, so plays, joins and leaves all
+        // The count is nudged in memory rather than re-aggregated. Plays are bursty by
+        // design, and every open circuit subscribes, so re-querying here would fire a
+        // grouped scan per press per browser. PlayAsync writes exactly one row before
+        // raising this, so the increment is exact rather than an estimate.
+        if (notification.Kind == SoundboardActivity.Played)
+        {
+            CountPlayLocally(notification);
+        }
+
+        // The activity list is re-read rather than spliced, so plays, joins and leaves all
         // arrive through one path and stay in true chronological order.
         _recent = await Activity.GetRecentAsync(15);
         StateHasChanged();
     });
 
+    /// <summary>
+    /// Applies one play to the in-memory counts. Deliberately does not re-sort: under
+    /// "most played" a live reorder would move tiles out from under the cursor mid-click,
+    /// so the order is left until the next explicit reload.
+    /// </summary>
+    private void CountPlayLocally(SoundPlayedNotification notification)
+    {
+        var existing = _stats.GetValueOrDefault(
+            notification.SoundId, new SoundPlayStats(notification.SoundId, 0, 0, 0, null));
+
+        _stats[notification.SoundId] = existing with
+        {
+            Plays = existing.Plays + 1,
+            PlaysThisWeek = existing.PlaysThisWeek + 1,
+            LastPlayedAt = notification.PlayedAt,
+        };
+    }
+
     private void OnLibraryChanged() => InvokeAsync(async () =>
     {
         _all = await Library.GetAllAsync();
+        _stats = new Dictionary<Guid, SoundPlayStats>(await Statistics.GetPerSoundAsync());
         _allTags = [.. _all.SelectMany(s => s.TagList).Distinct().OrderBy(t => t)];
+        RebuildUploaders();
         // A sound someone else deleted cascades out of favourites, so reload them too.
         await ReloadFavoritesAsync();
-        ApplyFilter();
+        ApplyView();
         StateHasChanged();
     });
 
@@ -486,6 +681,67 @@
         {
             _hotkeyRef = DotNetObjectReference.Create(this);
             await JS.InvokeVoidAsync("semperSounds.registerHotkeys", _hotkeyRef);
+
+            await RestorePreferencesAsync();
+        }
+    }
+
+    /// <summary>
+    /// Applies the stored sort and filters, if any.
+    /// </summary>
+    /// <remarks>
+    /// Here rather than in OnInitializedAsync because rendering is prerendered: there is no
+    /// JS runtime during that pass and any interop call throws. The cost is a brief flash of
+    /// the default A–Z board before this lands, which is the accepted trade for localStorage —
+    /// only a cookie is readable early enough to avoid it.
+    /// </remarks>
+    private async Task RestorePreferencesAsync()
+    {
+        string? stored;
+        try
+        {
+            stored = await JS.InvokeAsync<string?>(
+                "semperSounds.getPreference", BoardPreferencesJson.StorageKey);
+        }
+        catch (JSException)
+        {
+            // Nothing here is worth killing the circuit over; the default board is fine.
+            return;
+        }
+
+        var restored = BoardPreferencesJson.Deserialize(stored);
+
+        // Drop choices that no longer match anything, or the viewer gets an empty grid with
+        // no visible reason: the uploader may have had every sound deleted, and a tag can be
+        // renamed away underneath a saved preference.
+        if (restored.UploaderId is { } uploaderId && _uploaders.All(u => u.Id != uploaderId))
+        {
+            restored = restored with { UploaderId = null };
+        }
+
+        var tags = (restored.Tags ?? []).Where(_allTags.Contains).ToList();
+
+        _preferences = restored with { Tags = tags };
+        _selectedTags = tags;
+        _selectedFilters = [.. Enum.GetValues<BoardFilter>()
+            .Where(flag => flag != BoardFilter.None && restored.Filters.HasFlag(flag))];
+
+        ApplyView();
+        StateHasChanged();
+    }
+
+    private async Task SavePreferencesAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync(
+                "semperSounds.setPreference",
+                BoardPreferencesJson.StorageKey,
+                BoardPreferencesJson.Serialize(_preferences));
+        }
+        catch (JSException)
+        {
+            // Losing a saved preference is not worth surfacing, let alone throwing over.
         }
     }
 
