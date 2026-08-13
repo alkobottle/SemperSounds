@@ -294,6 +294,30 @@ GatewayClient → DiscordBotService → VoiceTransitionJournal → SoundboardEve
               → EntrySoundCoordinator (single) → EntrySoundPolicy → PlaybackService → PcmMixer
 ```
 
+### Pages
+
+| Route | File | Notes |
+|---|---|---|
+| `/` | `Landing.razor` | Public; carries the link-preview card and redirects members to `/board` |
+| `/board` | `Home.razor` | The soundboard. Favourites strip, search, sort, filters, tiles, recent activity |
+| `/upload` | `Upload.razor` | Waveform trimming, emoji, tags |
+| `/entry-sound` | `MyEntrySound.razor` | Pick your own entry sound, self-mute, see everyone else's |
+| `/admin/entry-sounds` | `AdminEntrySounds.razor` | `[Authorize(Policy = EntrySoundPolicies.Administrator)]` |
+| `/log` | `Log.razor` | Raw activity, newest first |
+| `/stats` | `Stats.razor` | Top sounds and users, plays per day. Loads once, no subscriptions |
+
+Every page except `/` requires sign-in, which already requires guild membership. The file
+names deliberately avoid the entity names they would otherwise shadow inside their own
+`@code` block — `MyEntrySound` rather than `EntrySound`, `AdminEntrySounds` rather than
+`EntrySoundSettings`. For the same reason `EntrySoundLibrary` is injected as `Entries`: a
+property named `EntrySounds` collides with the `SemperSounds.Core.EntrySounds` namespace that
+`_Imports.razor` pulls into scope.
+
+Nav lives in `MainLayout.razor` **twice** — a desktop `MudHidden` button row and a mobile
+`MudMenu` — so every entry has to be added in both. The bar needs roughly 690px of fixed
+content on desktop, which is why Log and Stats share a "History" menu rather than taking a
+slot each.
+
 ### Lifetime boundary (most common source of mistakes)
 
 `DiscordBotService`, `VoiceStateTracker`, `PlaybackService`, `SoundboardEvents`,

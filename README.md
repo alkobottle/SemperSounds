@@ -10,6 +10,10 @@ Discord caps how many sounds a server's built-in soundboard can hold. This repla
 bot joins your voice channel, and a web page lets anyone in that channel fire uploaded
 clips into it. Sounds overlap the way the real soundboard does, and everything is logged.
 
+It also does the two things Discord charges for or does not do at all: a personal **entry
+sound** when you walk into voice, and **play counts** you can sort and filter the whole
+board by.
+
 - **Backend:** .NET 10 + [NetCord](https://netcord.dev) (gateway and voice)
 - **UI:** Blazor Web App (InteractiveServer) + [MudBlazor](https://mudblazor.com)
 - **Storage:** SQLite + files on a mounted volume
@@ -27,13 +31,59 @@ clips into it. Sounds overlap the way the real soundboard does, and everything i
 | Longer files | Fine — trim them in the browser on a waveform before uploading. Sources up to 5 minutes |
 | Loudness | Normalized at upload, so no clip is ten times louder than the rest |
 | Finding things | Live search over names, tags and emoji, plus tag filters. Tags autocomplete against those already in use, so near-duplicates do not pile up |
+| Sorting | A–Z, most played, newest, recently played, longest or shortest. Your choice is remembered in your browser |
+| Filtering | By uploader, favourites only, never played, or untagged — all combining with search and tags |
+| Play counts | Shown on each tile, counted from the log you already have, so they are meaningful immediately rather than starting at zero |
 | Emoji | Every sound carries one — your server's custom emoji or any standard one — and search matches it, including a custom emoji's name |
 | Favourites | Each person stars up to 9 sounds and plays them with keys 1–9 |
+| Entry sounds | Each person picks a clip that plays when they walk into the channel the bot is already in |
 | Leaving | The bot drops out a few seconds after the last human leaves the channel |
-| Log | Sounds played, plus who summoned the bot and when it left |
+| Log | Sounds played, entry sounds fired, plus who summoned the bot and when it left |
 
 Uploads are converted once at upload into raw 48 kHz stereo PCM plus a normalized mp3
 preview. Playback then never spawns a process — it reads ~1 MB off disk and mixes it.
+
+## Entry sounds
+
+Everyone picks one clip from the board at `/entry-sound`, and it plays when they walk into
+voice. The bot is **passive about this**: it never joins a channel on its own to play one.
+If it is not already sitting where you arrived, nothing happens — which is what stops it
+being dragged out of a channel people are using, and stops a connect handshake delaying
+every clip.
+
+It also stays quiet when you are the only one there, when you have muted yourself, and for
+a while after it last played for you, so leaving and rejoining is not a weapon.
+
+Anyone with the Discord **Administrator** permission gets `/admin/entry-sounds`:
+
+| Control | What it is for |
+|---|---|
+| On/off | The blunt instrument |
+| Snooze | Quiet for 1–8 hours and back on by itself, so nobody has to remember |
+| Silence one person | Their entry sound stops; everyone else's keeps working. They can see the reason |
+| Volume | Entry sounds sit under conversation instead of over it. Board presses are unaffected |
+| Cooldown and length cap | Editable live instead of by redeploying. The length cap applies when somebody picks, so tightening it never silently unassigns anyone |
+
+Those settings live in the database, so they survive restarts. Permissions are read from
+Discord live rather than from your login, so promoting somebody takes effect immediately
+instead of when they next sign in.
+
+## Stats
+
+Play counts come from the activity log rather than a counter column, which means they
+cover every play the log has ever held rather than starting from the day the feature
+shipped. Only deliberate button presses count — an entry sound firing does not inflate its
+clip's ranking.
+
+`/stats` has the totals, the top ten sounds, who presses the most buttons, and plays per
+day over the last week, fortnight or month. Deleted sounds stay in the rankings, marked, so
+the totals still add up.
+
+A clip's tile shows a flame instead of a play icon when it is **trending** — played more in
+the last seven days than the seven before, with at least five plays this week. That is a
+rise rather than a rank, so a perennial favourite at a steady rate does not wear one
+forever. Clicking the count opens its history: total plays, first and last, and who plays
+it most.
 
 ## Discord setup
 
@@ -46,9 +96,10 @@ At <https://discord.com/developers/applications>:
    (and `http://localhost:5219/signin-discord` for local development).
 5. **Bot → Privileged Gateway Intents → enable Server Members Intent.** Self-enablable
    below 100 servers, no review needed. **Do not skip this**: without it Discord sends an
-   effectively empty member list, so avatars and nicknames never resolve and the bot
-   counts itself as a listener, meaning it never auto-disconnects from an empty channel.
-   Presence and Message Content stay off.
+   effectively empty member list, so avatars and nicknames never resolve, the bot counts
+   itself as a listener and never auto-disconnects from an empty channel, and nobody's
+   roles can be read — which means nobody is recognised as an administrator and the entry
+   sound settings page is unreachable. Presence and Message Content stay off.
 6. **Invite the bot** with the `bot` scope and the **Connect** and **Speak** permissions.
 7. In Discord, enable Developer Mode, right-click your server → **Copy Server ID** →
    this is `Discord__GuildId`.
@@ -184,17 +235,35 @@ the container — `Soundboard__MaxDurationSeconds` is the same knob as the neste
 | `Soundboard__FfmpegPath` / `Soundboard__FfprobePath` | `ffmpeg` / `ffprobe` | Override if they are not on `PATH` |
 | `Soundboard__TranscodeTimeoutSeconds` | `60` | Kills a stuck ffmpeg run |
 
+Entry sounds are deliberately **not** configured here. Their on/off switch, snooze, volume,
+cooldown and length cap live in the database and are edited at `/admin/entry-sounds`, so
+changing them does not mean a redeploy. `Soundboard__PerUserCooldownSeconds` above throttles
+board presses only and is a separate knob from the entry sound cooldown — sharing one would
+mean pressing a button silenced your own entry sound.
+
 ## Layout
 
 ```
 src/SemperSounds.Core/     Domain: PcmMixer, upload validation, ffmpeg wrappers, EF model
+                           EntrySounds/  who has which entry sound, and the rules for playing it
+                           Statistics/   play counts and rankings, aggregated from the log
 src/SemperSounds.Web/      Blazor UI, Discord gateway + voice, auth
 tools/SemperSounds.Import/ Bulk importer, published into the same image
 tests/SemperSounds.Tests/  Unit tests
 ```
 
-`/` is a public landing page carrying the link-preview card; the board itself is `/board`
-and requires sign-in.
+| Page | What it is |
+|---|---|
+| `/` | Public landing page carrying the link-preview card |
+| `/board` | The soundboard |
+| `/upload` | Add a sound, trimming it on a waveform first |
+| `/entry-sound` | Your entry sound, and everyone else's |
+| `/admin/entry-sounds` | Entry sound controls, Discord administrators only |
+| `/log` | Everything that happened, newest first |
+| `/stats` | Play counts, rankings and a plays-per-day chart |
 
-The mixer and upload validator live in `Core` specifically so they can be tested without
-a Discord connection or a browser.
+Everything except `/` requires sign-in, which requires being in the server.
+
+The mixer, upload validator, entry sound rules, board sorting and play statistics all live
+outside the pages specifically so they can be tested without a Discord connection or a
+browser — there is no bUnit here, so anything left inside a `.razor` file is untestable.
