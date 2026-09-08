@@ -22,9 +22,7 @@ namespace SemperSounds.Web.Services;
 /// "you are not an administrator" when the truth is "not known yet".
 /// </para>
 /// </remarks>
-public sealed class GuildPermissionProvider(
-    DiscordBotService bot,
-    IOptions<DiscordOptions> options) : IGuildPermissions
+public sealed class GuildPermissionProvider(DiscordBotService bot, IOptions<DiscordOptions> options) : IGuildPermissions
 {
     private readonly ulong _guildId = options.Value.GuildId;
 

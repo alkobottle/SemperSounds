@@ -19,8 +19,7 @@ public sealed class FavoriteLibraryTests : IDisposable
         _connection = new SqliteConnection("Data Source=:memory:");
         _connection.Open();
 
-        _db = new SoundboardDbContext(
-            new DbContextOptionsBuilder<SoundboardDbContext>().UseSqlite(_connection).Options);
+        _db = new SoundboardDbContext(new DbContextOptionsBuilder<SoundboardDbContext>().UseSqlite(_connection).Options);
         _db.Database.EnsureCreated();
 
         _favorites = new FavoriteLibrary(_db);

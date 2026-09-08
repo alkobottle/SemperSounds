@@ -31,9 +31,6 @@ public sealed class GuildUserDirectory(DiscordBotService bot, IOptions<DiscordOp
             return new GuildUserInfo(userId, name, user.GetAvatarUrl()?.ToString());
         }
 
-        return new GuildUserInfo(
-            userId,
-            string.IsNullOrWhiteSpace(fallbackName) ? userId.ToString() : fallbackName,
-            null);
+        return new GuildUserInfo(userId, string.IsNullOrWhiteSpace(fallbackName) ? userId.ToString() : fallbackName, null);
     }
 }

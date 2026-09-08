@@ -79,18 +79,13 @@ public sealed class SoundLibrary(
 
             sound.DurationMs = validation.DurationMs;
 
-            await transcoder.TranscodeAsync(
-                tempPath, pcmPath, previewPath,
-                trim?.StartSeconds ?? 0,
-                trim?.LengthSeconds,
-                cancellationToken);
+            await transcoder.TranscodeAsync(tempPath, pcmPath, previewPath, trim?.StartSeconds ?? 0, trim?.LengthSeconds, cancellationToken);
 
             db.Sounds.Add(sound);
             await db.SaveChangesAsync(cancellationToken);
             stored = true;
 
-            logger.LogInformation(
-                "{Uploader} uploaded {Name} ({DurationMs}ms)", uploaderName, sound.Name, sound.DurationMs);
+            logger.LogInformation("{Uploader} uploaded {Name} ({DurationMs}ms)", uploaderName, sound.Name, sound.DurationMs);
 
             return SoundUploadResult.Success(sound);
         }
@@ -128,16 +123,13 @@ public sealed class SoundLibrary(
         db.Sounds.Remove(sound);
         await db.SaveChangesAsync(cancellationToken);
 
-        DeleteQuietly(
-            Path.Combine(_options.SoundsPath, sound.PcmFileName),
-            Path.Combine(_options.SoundsPath, sound.PreviewFileName));
+        DeleteQuietly(Path.Combine(_options.SoundsPath, sound.PcmFileName), Path.Combine(_options.SoundsPath, sound.PreviewFileName));
 
         return true;
     }
 
     /// <summary>Edits a sound's presentation. Open to any signed-in member, like deleting.</summary>
-    public async Task<bool> UpdateAsync(
-        Guid id, string newName, string newTags, string newEmoji, CancellationToken cancellationToken = default)
+    public async Task<bool> UpdateAsync(Guid id, string newName, string newTags, string newEmoji, CancellationToken cancellationToken = default)
     {
         var sound = await db.Sounds.FirstOrDefaultAsync(s => s.Id == id, cancellationToken);
         if (sound is null || string.IsNullOrWhiteSpace(newName))

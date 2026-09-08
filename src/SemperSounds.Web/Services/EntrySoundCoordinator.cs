@@ -105,13 +105,11 @@ public sealed class EntrySoundCoordinator(
 
             var userName = users.Resolve(arrival.UserId).DisplayName;
 
-            var result = await playback.PlayEntrySoundAsync(
-                arrival.UserId, userName, arrival.ChannelId, decision.SoundId, settings.Gain);
+            var result = await playback.PlayEntrySoundAsync(arrival.UserId, userName, arrival.ChannelId, decision.SoundId, settings.Gain);
 
             if (!result.IsSuccess)
             {
-                logger.LogInformation(
-                    "Entry sound for {UserId} did not play: {Reason}", arrival.UserId, result.Error);
+                logger.LogInformation("Entry sound for {UserId} did not play: {Reason}", arrival.UserId, result.Error);
             }
         }
         catch (Exception ex)

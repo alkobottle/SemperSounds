@@ -16,10 +16,7 @@ public readonly record struct VoiceMember(ulong UserId, string DisplayName, stri
 /// dictionary. NetCord already applies every VOICE_STATE_UPDATE to that cache, and a
 /// second copy would only add a way for the two to disagree.
 /// </remarks>
-public sealed class VoiceStateTracker(
-    DiscordBotService bot,
-    GuildUserDirectory users,
-    IOptions<DiscordOptions> options)
+public sealed class VoiceStateTracker(DiscordBotService bot, GuildUserDirectory users, IOptions<DiscordOptions> options)
 {
     private readonly ulong _guildId = options.Value.GuildId;
 

@@ -82,8 +82,7 @@
         _error = null;
         _loaded = false;
 
-        var result = await JS.InvokeAsync<LoadResult>(
-            "semperTrimmer.load", _canvas, FileInputSelector, _self, MaxLengthSeconds);
+        var result = await JS.InvokeAsync<LoadResult>("semperTrimmer.load", _canvas, FileInputSelector, _self, MaxLengthSeconds);
 
         if (!result.Ok)
         {

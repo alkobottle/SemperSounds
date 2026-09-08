@@ -11,8 +11,7 @@ public enum VoiceTransition
 
 /// <param name="FromChannelId">Where they were. Null for <see cref="VoiceTransition.Joined"/>.</param>
 /// <param name="ToChannelId">Where they are now. Null for <see cref="VoiceTransition.Left"/>.</param>
-public readonly record struct VoiceMovement(
-    VoiceTransition Kind, ulong UserId, ulong? FromChannelId, ulong? ToChannelId)
+public readonly record struct VoiceMovement(VoiceTransition Kind, ulong UserId, ulong? FromChannelId, ulong? ToChannelId)
 {
     /// <summary>Joined or moved — the two transitions an entry sound cares about.</summary>
     public bool IsArrival => Kind is VoiceTransition.Joined or VoiceTransition.Moved;

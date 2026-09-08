@@ -303,9 +303,7 @@
             return;
         }
 
-        await ApplyAsync(
-            Admin.BlockAsync(_userId, _userName, targetUserId, $"Silenced by {_userName}"),
-            $"{name} is silenced");
+        await ApplyAsync(Admin.BlockAsync(_userId, _userName, targetUserId, $"Silenced by {_userName}"), $"{name} is silenced");
     }
 
     private Task Unblock(ulong targetUserId) =>

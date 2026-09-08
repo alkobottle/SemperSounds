@@ -23,9 +23,7 @@ public class BoardViewTests
         };
 
     private static Dictionary<Guid, SoundPlayStats> Stats(params (Sound Sound, int Plays)[] entries) =>
-        entries.ToDictionary(
-            e => e.Sound.Id,
-            e => new SoundPlayStats(e.Sound.Id, e.Plays, 0, 0, Now));
+        entries.ToDictionary(e => e.Sound.Id, e => new SoundPlayStats(e.Sound.Id, e.Plays, 0, 0, Now));
 
     private static List<string> Names(IEnumerable<Sound> sounds) => [.. sounds.Select(s => s.Name)];
 
@@ -88,10 +86,7 @@ public class BoardViewTests
         var played = MakeSound("aaa-played");
         var never = MakeSound("bbb-never");
 
-        var result = Apply(
-            [never, played],
-            new BoardPreferences(Sort: BoardSort.MostPlayed),
-            stats: Stats((played, 3)));
+        var result = Apply([never, played], new BoardPreferences(Sort: BoardSort.MostPlayed), stats: Stats((played, 3)));
 
         Assert.Equal(["aaa-played", "bbb-never"], Names(result));
     }
@@ -129,8 +124,7 @@ public class BoardViewTests
             [fresh.Id] = new(fresh.Id, 1, 0, 0, Now),
         };
 
-        var result = Apply(
-            [never, old, fresh], new BoardPreferences(Sort: BoardSort.RecentlyPlayed), stats: stats);
+        var result = Apply([never, old, fresh], new BoardPreferences(Sort: BoardSort.RecentlyPlayed), stats: stats);
 
         Assert.Equal(["fresh", "old", "never"], Names(result));
     }
@@ -145,13 +139,9 @@ public class BoardViewTests
             MakeSound("mid", durationMs: 2500),
         };
 
-        Assert.Equal(
-            ["long", "mid", "short"],
-            Names(Apply(sounds, new BoardPreferences(Sort: BoardSort.Longest))));
+        Assert.Equal(["long", "mid", "short"], Names(Apply(sounds, new BoardPreferences(Sort: BoardSort.Longest))));
 
-        Assert.Equal(
-            ["short", "mid", "long"],
-            Names(Apply(sounds, new BoardPreferences(Sort: BoardSort.Shortest))));
+        Assert.Equal(["short", "mid", "long"], Names(Apply(sounds, new BoardPreferences(Sort: BoardSort.Shortest))));
     }
 
     [Fact]
@@ -174,8 +164,7 @@ public class BoardViewTests
         var both = MakeSound("both", tags: "meme,loud");
         var one = MakeSound("one", tags: "meme");
 
-        var result = Apply(
-            [both, one], new BoardPreferences(Tags: ["meme", "loud"]));
+        var result = Apply([both, one], new BoardPreferences(Tags: ["meme", "loud"]));
 
         Assert.Equal(["both"], Names(result));
     }
@@ -189,10 +178,7 @@ public class BoardViewTests
         var played = MakeSound("played");
         var never = MakeSound("never");
 
-        var result = Apply(
-            [played, never],
-            new BoardPreferences(Filters: BoardFilter.NeverPlayed),
-            stats: Stats((played, 4)));
+        var result = Apply([played, never], new BoardPreferences(Filters: BoardFilter.NeverPlayed), stats: Stats((played, 4)));
 
         Assert.Equal(["never"], Names(result));
     }
@@ -203,9 +189,7 @@ public class BoardViewTests
         var starred = MakeSound("starred");
         var plain = MakeSound("plain");
 
-        var result = Apply(
-            [starred, plain],
-            new BoardPreferences(Filters: BoardFilter.FavouritesOnly),
+        var result = Apply([starred, plain], new BoardPreferences(Filters: BoardFilter.FavouritesOnly),
             favorites: new HashSet<Guid> { starred.Id });
 
         Assert.Equal(["starred"], Names(result));
@@ -246,10 +230,7 @@ public class BoardViewTests
 
         var result = Apply(
             [match, wrongUploader, wrongSearch, wrongTag, notFavourite],
-            new BoardPreferences(
-                Filters: BoardFilter.FavouritesOnly | BoardFilter.NeverPlayed,
-                UploaderId: 7,
-                Tags: ["meme"]),
+            new BoardPreferences(Filters: BoardFilter.FavouritesOnly | BoardFilter.NeverPlayed, UploaderId: 7, Tags: ["meme"]),
             search: "airhorn",
             favorites: new HashSet<Guid> { match.Id, wrongUploader.Id, wrongSearch.Id, wrongTag.Id });
 
@@ -273,10 +254,7 @@ public class BoardViewTests
         var wrongTag = MakeSound("airhorn quiet", tags: "calm");
         var wrongName = MakeSound("piano", tags: "meme");
 
-        var result = Apply(
-            [match, wrongTag, wrongName],
-            new BoardPreferences(Tags: ["meme"]),
-            search: "airhorn");
+        var result = Apply([match, wrongTag, wrongName], new BoardPreferences(Tags: ["meme"]), search: "airhorn");
 
         Assert.Equal(["airhorn blast"], Names(result));
     }

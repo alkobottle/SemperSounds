@@ -28,8 +28,7 @@ public static class DiscordAuthentication
     public static string? GetAvatarUrl(this ClaimsPrincipal principal) =>
         principal.FindFirstValue(AvatarClaim);
 
-    public static IServiceCollection AddSemperSoundsAuthentication(
-        this IServiceCollection services, IConfiguration configuration)
+    public static IServiceCollection AddSemperSoundsAuthentication(this IServiceCollection services, IConfiguration configuration)
     {
         var discord = configuration.GetSection(DiscordOptions.SectionName).Get<DiscordOptions>()
             ?? new DiscordOptions();
@@ -132,8 +131,7 @@ public static class DiscordAuthentication
         }
 
         var extension = avatar.GetString()!.StartsWith("a_", StringComparison.Ordinal) ? "gif" : "png";
-        context.Identity?.AddClaim(new Claim(
-            AvatarClaim,
+        context.Identity?.AddClaim(new Claim(AvatarClaim,
             $"https://cdn.discordapp.com/avatars/{id.GetString()}/{avatar.GetString()}.{extension}"));
     }
 }

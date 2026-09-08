@@ -124,9 +124,7 @@ public sealed class SoundLibraryTests : IDisposable
     [Fact]
     public async Task FailedTranscode_LeavesNoRowBehind()
     {
-        var library = CreateLibrary(
-            new AudioProbeResult(true, TimeSpan.FromSeconds(2)),
-            new ThrowingTranscoder());
+        var library = CreateLibrary(new AudioProbeResult(true, TimeSpan.FromSeconds(2)), new ThrowingTranscoder());
 
         var result = await library.AddAsync(Upload(), "broken.mp3", "Broken", "", 42, "alkobot");
 
@@ -147,8 +145,7 @@ public sealed class SoundLibraryTests : IDisposable
         var transcoder = new StubTranscoder();
         var library = CreateLibrary(new AudioProbeResult(true, TimeSpan.FromSeconds(10.4)), transcoder);
 
-        var result = await library.AddAsync(
-            Upload(), "long.mp3", "Bit", "", 42, "alkobot", "🔥", new TrimRequest(2.1, 3.0));
+        var result = await library.AddAsync(Upload(), "long.mp3", "Bit", "", 42, "alkobot", "🔥", new TrimRequest(2.1, 3.0));
 
         Assert.True(result.IsSuccess);
         Assert.Equal(2.1, transcoder.LastStart);

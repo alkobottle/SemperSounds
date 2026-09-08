@@ -7,9 +7,7 @@ using SemperSounds.Core.Configuration;
 namespace SemperSounds.Core.Audio;
 
 /// <summary>Reads duration and audio-stream presence with ffprobe.</summary>
-public sealed class FfmpegAudioProbe(
-    IOptions<SoundboardOptions> options,
-    ILogger<FfmpegAudioProbe> logger) : IAudioProbe
+public sealed class FfmpegAudioProbe(IOptions<SoundboardOptions> options, ILogger<FfmpegAudioProbe> logger) : IAudioProbe
 {
     private readonly SoundboardOptions _options = options.Value;
 
