@@ -1,0 +1,225 @@
+.mace-tip-reel {
+    position: relative;
+    isolation: isolate;
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 640px;
+    margin-bottom: 1.5rem;
+    padding: 1.25rem 1.5rem 1rem;
+    overflow: hidden;
+    color: #fff;
+    text-align: center;
+    background:
+        radial-gradient(circle at 12% 10%, rgba(255, 213, 79, 0.24), transparent 30%),
+        linear-gradient(135deg, rgba(88, 101, 242, 0.42), rgba(235, 69, 158, 0.35) 55%, rgba(255, 193, 7, 0.2));
+    border: 1px solid rgba(255, 213, 79, 0.72);
+    border-radius: 16px;
+    box-shadow: 0 10px 30px rgba(235, 69, 158, 0.18), inset 0 0 24px rgba(255, 255, 255, 0.04);
+}
+
+.mace-tip-reel::before {
+    position: absolute;
+    z-index: -1;
+    inset: -120% -45%;
+    content: "";
+    background: linear-gradient(100deg, transparent 42%, rgba(255, 255, 255, 0.16) 50%, transparent 58%);
+    transform: translateX(-45%) rotate(8deg);
+    animation: mace-tip-shimmer 8s ease-in-out infinite;
+    pointer-events: none;
+}
+
+.mace-tip-heading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.65rem;
+    padding: 0 2rem;
+}
+
+.mace-tip-heading h2 {
+    margin: 0;
+    color: #ffe082;
+    font-size: 1.2rem;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+    text-shadow: 0 2px 14px rgba(255, 193, 7, 0.35);
+}
+
+.mace-tip-star {
+    color: #ffd54f;
+    font-size: 1.15rem;
+    filter: drop-shadow(0 0 6px rgba(255, 213, 79, 0.7));
+    animation: mace-tip-star-pulse 2.4s ease-in-out infinite;
+}
+
+.mace-tip-star:last-child {
+    animation-delay: 1.2s;
+}
+
+.mace-tip-close,
+.mace-tip-nav {
+    display: grid;
+    color: rgba(255, 255, 255, 0.82);
+    font: inherit;
+    line-height: 1;
+    background: rgba(24, 26, 29, 0.24);
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    border-radius: 999px;
+    place-items: center;
+    cursor: pointer;
+    transition: color 160ms ease, background-color 160ms ease, border-color 160ms ease, transform 160ms ease;
+}
+
+.mace-tip-close:hover,
+.mace-tip-nav:hover {
+    color: #fff;
+    background: rgba(235, 69, 158, 0.34);
+    border-color: rgba(255, 213, 79, 0.72);
+    transform: scale(1.08);
+}
+
+.mace-tip-close:focus-visible,
+.mace-tip-nav:focus-visible {
+    outline: 3px solid rgba(255, 224, 130, 0.75);
+    outline-offset: 2px;
+}
+
+.mace-tip-close {
+    position: absolute;
+    z-index: 1;
+    top: 0.65rem;
+    right: 0.65rem;
+    width: 2rem;
+    height: 2rem;
+    font-size: 1.3rem;
+}
+
+.mace-tip-content {
+    display: grid;
+    grid-template-columns: 2.5rem minmax(0, 1fr) 2.5rem;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.mace-tip-nav {
+    width: 2.5rem;
+    height: 2.5rem;
+    font-size: 2rem;
+}
+
+.mace-tip-stage {
+    display: grid;
+    min-height: 3.25rem;
+    place-items: center;
+}
+
+.mace-tip {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 650;
+    line-height: 1.35;
+    text-wrap: balance;
+    animation: mace-tip-arrive 420ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.mace-tip-progress {
+    display: flex;
+    justify-content: center;
+    gap: 0.4rem;
+}
+
+.mace-tip-dot {
+    width: 0.38rem;
+    height: 0.38rem;
+    background: rgba(255, 255, 255, 0.25);
+    border-radius: 999px;
+    transition: width 220ms ease, background-color 220ms ease, box-shadow 220ms ease;
+}
+
+.mace-tip-dot.is-active {
+    width: 1rem;
+    background: #ffd54f;
+    box-shadow: 0 0 8px rgba(255, 213, 79, 0.72);
+}
+
+@keyframes mace-tip-arrive {
+    from {
+        opacity: 0;
+        transform: translateY(0.45rem) scale(0.98);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+@keyframes mace-tip-star-pulse {
+    0%, 100% {
+        transform: scale(0.9) rotate(-8deg);
+    }
+
+    50% {
+        transform: scale(1.18) rotate(8deg);
+    }
+}
+
+@keyframes mace-tip-shimmer {
+    0%, 55% {
+        transform: translateX(-45%) rotate(8deg);
+    }
+
+    85%, 100% {
+        transform: translateX(45%) rotate(8deg);
+    }
+}
+
+@media (max-width: 600px) {
+    .mace-tip-reel {
+        padding: 1rem 0.85rem 0.85rem;
+    }
+
+    .mace-tip-heading {
+        gap: 0.4rem;
+        padding: 0 1.75rem;
+    }
+
+    .mace-tip-heading h2 {
+        font-size: 1.05rem;
+    }
+
+    .mace-tip-star {
+        font-size: 0.95rem;
+    }
+
+    .mace-tip-stage {
+        min-height: 4rem;
+    }
+
+    .mace-tip-content {
+        grid-template-columns: 2.25rem minmax(0, 1fr) 2.25rem;
+        gap: 0.25rem;
+    }
+
+    .mace-tip-nav {
+        width: 2.25rem;
+        height: 2.25rem;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .mace-tip-reel::before,
+    .mace-tip-star,
+    .mace-tip {
+        animation: none;
+    }
+
+    .mace-tip-dot {
+        transition: none;
+    }
+
+    .mace-tip-close,
+    .mace-tip-nav {
+        transition: none;
+    }
+}

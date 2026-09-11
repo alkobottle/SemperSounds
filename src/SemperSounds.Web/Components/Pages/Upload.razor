@@ -1,14 +1,42 @@
 @page "/upload"
 @attribute [Authorize]
-@using SemperSounds.Core.Sounds
+@implements IAsyncDisposable
 @inject SoundLibrary Library
 @inject SoundboardEvents Events
 @inject ISnackbar Snackbar
 @inject NavigationManager Navigation
 @inject AuthenticationStateProvider AuthenticationStateProvider
-@inject Microsoft.Extensions.Options.IOptions<SemperSounds.Core.Configuration.SoundboardOptions> Options
+@inject Microsoft.Extensions.Options.IOptions<Core.Configuration.SoundboardOptions> Options
 
 <PageTitle>Upload · SemperSounds</PageTitle>
+
+@if (_showTips)
+{
+    <section class="mace-tip-reel" role="region" aria-labelledby="mace-tip-title">
+        <button type="button" class="mace-tip-close" aria-label="Close sound creation tips" @onclick="CloseTipsAsync">×</button>
+
+        <div class="mace-tip-heading">
+            <span class="mace-tip-star" aria-hidden="true">★</span>
+            <h2 id="mace-tip-title">Mace's Sound Creation Tips</h2>
+            <span class="mace-tip-star" aria-hidden="true">★</span>
+        </div>
+
+        <div class="mace-tip-content">
+            <button type="button" class="mace-tip-nav" aria-label="Previous sound creation tip" aria-controls="mace-current-tip" @onclick="ShowPreviousTip">‹</button>
+            <div class="mace-tip-stage" aria-live="polite" aria-atomic="true">
+                <p id="mace-current-tip" class="mace-tip" @key="_tipIndex">@Tips[_tipIndex]</p>
+            </div>
+            <button type="button" class="mace-tip-nav" aria-label="Next sound creation tip" aria-controls="mace-current-tip" @onclick="ShowNextTip">›</button>
+        </div>
+
+        <div class="mace-tip-progress" aria-hidden="true">
+            @for (var index = 0; index < Tips.Length; index++)
+            {
+                <span class="mace-tip-dot @(index == _tipIndex ? "is-active" : null)"></span>
+            }
+        </div>
+    </section>
+}
 
 <MudText Typo="Typo.h5" GutterBottom="true">Add a sound</MudText>
 
@@ -70,6 +98,18 @@
 </MudPaper>
 
 @code {
+    private static readonly string[] Tips =
+    [
+        "Keep it short and spicy.",
+        "Choose a clear name. \"Don't fail me again\" over \"1-v-5\"",
+        "Choose your emoji wisely",
+        "Use the funky tags!",
+        "Start at the fun part.",
+        "Preview before uploading.",
+    ];
+
+    private static readonly TimeSpan TipInterval = TimeSpan.FromSeconds(6);
+
     private IBrowserFile? _file;
     private string _name = string.Empty;
     private string _tags = string.Empty;
@@ -80,6 +120,10 @@
     private WaveformTrimmer? _trimmer;
     private TrimRequest? _trim;
     private bool _loadTrimmerOnRender;
+    private bool _showTips = true;
+    private int _tipIndex;
+    private CancellationTokenSource? _tipRotationCancellation;
+    private Task? _tipRotationTask;
 
     private void OnFileChanged(IBrowserFile? file)
     {
@@ -98,11 +142,48 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (firstRender)
+        {
+            _tipRotationCancellation = new CancellationTokenSource();
+            _tipRotationTask = RotateTipsAsync(_tipRotationCancellation.Token);
+        }
+
         if (_loadTrimmerOnRender && _trimmer is not null)
         {
             _loadTrimmerOnRender = false;
             await _trimmer.LoadAsync();
         }
+    }
+
+    private async Task RotateTipsAsync(CancellationToken cancellationToken)
+    {
+        using var timer = new PeriodicTimer(TipInterval);
+
+        try
+        {
+            while (await timer.WaitForNextTickAsync(cancellationToken))
+            {
+                await InvokeAsync(() =>
+                {
+                    ShowNextTip();
+                    StateHasChanged();
+                });
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // Expected when the user leaves the upload page.
+        }
+    }
+
+    private void ShowPreviousTip() => _tipIndex = (_tipIndex - 1 + Tips.Length) % Tips.Length;
+
+    private void ShowNextTip() => _tipIndex = (_tipIndex + 1) % Tips.Length;
+
+    private async Task CloseTipsAsync()
+    {
+        _showTips = false;
+        await StopTipRotationAsync();
     }
 
     private void OnTrimChanged((double Start, double Length) selection)
@@ -162,4 +243,25 @@
             _uploading = false;
         }
     }
+
+    private async Task StopTipRotationAsync()
+    {
+        if (_tipRotationCancellation is null)
+        {
+            return;
+        }
+
+        _tipRotationCancellation.Cancel();
+
+        if (_tipRotationTask is not null)
+        {
+            await _tipRotationTask;
+        }
+
+        _tipRotationCancellation.Dispose();
+        _tipRotationCancellation = null;
+        _tipRotationTask = null;
+    }
+
+    public async ValueTask DisposeAsync() => await StopTipRotationAsync();
 }
