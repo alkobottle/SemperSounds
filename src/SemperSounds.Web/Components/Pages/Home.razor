@@ -172,6 +172,20 @@
                     </MudChip>
                 }
             </MudChipSet>
+
+            @* Sits with the toggles rather than with the tags, because it undoes all of them
+               — including the search box, which has no other collective off switch. The
+               narrower tag-only Clear stays where it is. *@
+            @if (HasActiveFilters)
+            {
+                <MudButton Size="Size.Small"
+                           Variant="Variant.Text"
+                           Color="Color.Default"
+                           StartIcon="@Icons.Material.Filled.FilterAltOff"
+                           OnClick="ClearAllFilters">
+                    Clear filters
+                </MudButton>
+            }
         </div>
 
         @if (_allTags.Count > 0)
@@ -221,6 +235,20 @@
                 @(_all.Count == 0
                     ? "No sounds yet. Head to Upload and add the first one."
                     : "Nothing matches that filter.")
+
+                @* The way out, offered where the dead end actually is — the filter rows are
+                   above the fold but the reason to reach for them is down here. *@
+                @if (_all.Count > 0 && HasActiveFilters)
+                {
+                    <MudButton Size="Size.Small"
+                               Variant="Variant.Text"
+                               Color="Color.Info"
+                               StartIcon="@Icons.Material.Filled.FilterAltOff"
+                               OnClick="ClearAllFilters"
+                               Class="ml-2">
+                        Clear filters
+                    </MudButton>
+                }
             </MudAlert>
         }
         else
@@ -510,6 +538,24 @@
         _selectedTags = [];
         return TagsChanged();
     }
+
+    /// <summary>
+    /// Resets every filter at once. Four state holders, not one: the two chip sets own their
+    /// own selections, the search box is never persisted at all, and only what is left lives
+    /// on the preferences record.
+    /// </summary>
+    private Task ClearAllFilters()
+    {
+        _selectedTags = [];
+        _selectedFilters = [];
+        _search = string.Empty;
+        _preferences = _preferences.ClearFilters();
+
+        ApplyView();
+        return SavePreferencesAsync();
+    }
+
+    private bool HasActiveFilters => ActiveFilterCount > 0;
 
     /// <summary>
     /// Named ApplyView, not ApplyFilter: it sorts as well now, and a method whose name has

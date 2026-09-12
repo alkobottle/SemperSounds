@@ -320,6 +320,44 @@ public class BoardViewTests
     }
 
     [Fact]
+    public void ClearFilters_DropsEveryFilterDimension()
+    {
+        var cleared = new BoardPreferences(
+            Filters: BoardFilter.FavouritesOnly | BoardFilter.NeverPlayed,
+            UploaderId: 7,
+            Tags: ["meme", "loud"]).ClearFilters();
+
+        Assert.Equal(BoardFilter.None, cleared.Filters);
+        Assert.Null(cleared.UploaderId);
+        Assert.Null(cleared.Tags);
+    }
+
+    [Fact]
+    public void ClearFilters_KeepsHowTheBoardIsOrderedAndCombined()
+    {
+        // Neither of these hides a sound, so neither is what "clear the filters" means. A
+        // sort silently thrown away as a side effect is how a button stops being trusted.
+        var cleared = new BoardPreferences(
+            Sort: BoardSort.MostPlayed,
+            Filters: BoardFilter.Untagged,
+            Match: BoardMatch.Any).ClearFilters();
+
+        Assert.Equal(BoardSort.MostPlayed, cleared.Sort);
+        Assert.Equal(BoardMatch.Any, cleared.Match);
+    }
+
+    [Fact]
+    public void ClearedPreferences_ShowTheWholeLibraryAgain()
+    {
+        // The point of the button, end to end: whatever was hidden comes back.
+        var sounds = new[] { MakeSound("alpha", tags: "meme"), MakeSound("beta", uploaderId: 9) };
+        var filtered = new BoardPreferences(UploaderId: 7, Tags: ["meme"], Filters: BoardFilter.Untagged);
+
+        Assert.Empty(Apply(sounds, filtered));
+        Assert.Equal(["alpha", "beta"], Names(Apply(sounds, filtered.ClearFilters())));
+    }
+
+    [Fact]
     public void MatchAny_CountsTheToggleChipsAsReasonsToShow()
     {
         // Flags narrow under All and widen under Any like everything else — a favourite that

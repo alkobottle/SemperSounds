@@ -46,7 +46,18 @@ public sealed record BoardPreferences(
     BoardFilter Filters = BoardFilter.None,
     ulong? UploaderId = null,
     IReadOnlyList<string>? Tags = null,
-    BoardMatch Match = BoardMatch.All);
+    BoardMatch Match = BoardMatch.All)
+{
+    /// <summary>Drops every filter, keeping how the board is ordered and combined.</summary>
+    /// <remarks>
+    /// Sort and <see cref="Match"/> survive deliberately: neither hides a sound, so neither is
+    /// what somebody means by "clear the filters", and throwing away a chosen sort as a side
+    /// effect is the kind of thing that makes people stop trusting the button. Kept here
+    /// rather than written inline in the page so it is reachable from a test.
+    /// </remarks>
+    public BoardPreferences ClearFilters() =>
+        this with { Filters = BoardFilter.None, UploaderId = null, Tags = null };
+}
 
 /// <summary>
 /// Turns the library plus the viewer's choices into the list of tiles to render.

@@ -236,6 +236,21 @@ stamps every clip it creates with the same `UploadedAt`, so "recently uploaded" 
 ties, and most of the library has never been played, so "most played" is one large tie along
 the bottom. Without it the order there is arbitrary and shifts between renders.
 
+**Filters are a list of clauses, and only active criteria contribute one.** `BoardMatch`
+decides whether they compose as AND or OR, across every dimension — search, tags, uploader
+and the toggle chips — and the mode reaches inside the tag row, which is itself multi-valued.
+The "only active" rule is the whole design: a clause that is merely true of everything, such
+as an empty search box, would make `Any` return the library. `Any` over an *empty* clause
+list is `false`, so "nothing selected" is guarded explicitly before the mode is consulted —
+without it an untouched board in `Any` renders blank with no filter set to explain it.
+
+Consequences worth knowing: the `x / y` counter reads as "showing x of y", not "narrowed to
+x", and the toggle is only shown once two dimensions are active, since one criterion gives
+both modes the same answer. `ClearFilters()` on the record deliberately keeps `Sort` and
+`Match` — neither hides a sound, so neither is what "clear the filters" means — while the
+page has four state holders to reset, because both chip sets own their selections and the
+search term is never persisted at all.
+
 Sorting in memory with `OrdinalIgnoreCase` deliberately differs from the old
 `GetAllAsync` ordering: SQLite's default BINARY collation put every capital before every
 lowercase letter, so "Zebra" sorted above "apple".
