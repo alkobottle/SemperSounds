@@ -35,15 +35,13 @@ public sealed class FavoriteLibrary(SoundboardDbContext db)
             .ToListAsync(cancellationToken);
 
     /// <summary>The user's favourited sound IDs, for rendering star state on tiles.</summary>
-    public async Task<HashSet<Guid>> GetFavoritedSoundIdsAsync(
-        ulong userId, CancellationToken cancellationToken = default) =>
+    public async Task<HashSet<Guid>> GetFavoritedSoundIdsAsync(ulong userId, CancellationToken cancellationToken = default) =>
         [.. await db.Favorites.AsNoTracking()
             .Where(f => f.UserId == userId)
             .Select(f => f.SoundId)
             .ToListAsync(cancellationToken)];
 
-    public async Task<FavoriteToggleResult> ToggleAsync(
-        ulong userId, Guid soundId, CancellationToken cancellationToken = default)
+    public async Task<FavoriteToggleResult> ToggleAsync(ulong userId, Guid soundId, CancellationToken cancellationToken = default)
     {
         var existing = await db.Favorites
             .FirstOrDefaultAsync(f => f.UserId == userId && f.SoundId == soundId, cancellationToken);
@@ -65,8 +63,7 @@ public sealed class FavoriteLibrary(SoundboardDbContext db)
         {
             // Refused rather than evicting: the whole value of a favourite is that its key
             // stays where the user put it.
-            return FavoriteToggleResult.Refused(
-                $"You already have {MaxSlots} favourites. Remove one before adding another.");
+            return FavoriteToggleResult.Refused($"You already have {MaxSlots} favourites. Remove one before adding another.");
         }
 
         db.Favorites.Add(new Favorite

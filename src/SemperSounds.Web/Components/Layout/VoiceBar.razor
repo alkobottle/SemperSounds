@@ -126,8 +126,7 @@ else
         try
         {
             var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
-            var result = await Playback.JoinAsync(
-                state.User.GetDiscordUserId(), state.User.GetDisplayName());
+            var result = await Playback.JoinAsync(state.User.GetDiscordUserId(), state.User.GetDisplayName());
 
             if (!result.IsSuccess)
             {

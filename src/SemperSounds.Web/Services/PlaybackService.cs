@@ -55,8 +55,6 @@ public sealed class PlaybackService(
     /// <summary>Sound IDs currently sounding, so the UI can show them as playing.</summary>
     public IReadOnlySet<Guid> PlayingSoundIds => _playing;
 
-    public bool IsPlaying(Guid soundId) => _playing.Contains(soundId);
-
     /// <summary>The channel the bot is currently connected to, if any.</summary>
     public ulong? ConnectedChannelId { get; private set; }
 
@@ -68,8 +66,7 @@ public sealed class PlaybackService(
     /// <summary>
     /// Connects the bot to whichever voice channel the requesting user is sitting in.
     /// </summary>
-    public async Task<PlaybackResult> JoinAsync(
-        ulong userId, string userName = "", CancellationToken cancellationToken = default)
+    public async Task<PlaybackResult> JoinAsync(ulong userId, string userName = "", CancellationToken cancellationToken = default)
     {
         if (!bot.IsReady)
         {
@@ -98,12 +95,10 @@ public sealed class PlaybackService(
 
             if (previousChannelId is { } leftId)
             {
-                await LogActivityAsync(
-                    log => log.LogLeaveAsync(userId, userName, leftId, previousChannelName));
+                await LogActivityAsync(log => log.LogLeaveAsync(userId, userName, leftId, previousChannelName));
             }
 
-            var voiceClient = await bot.Client.JoinVoiceChannelAsync(
-                _discord.GuildId, channelId, cancellationToken: cancellationToken);
+            var voiceClient = await bot.Client.JoinVoiceChannelAsync(_discord.GuildId, channelId, cancellationToken: cancellationToken);
 
             await voiceClient.StartAsync(cancellationToken);
 
@@ -111,8 +106,7 @@ public sealed class PlaybackService(
             // sending. Skipping it makes the first SendVoiceAsync throw "Connection not
             // started". The pump lowers it again shortly afterwards, so the green ring
             // does not stay lit for the whole session.
-            await voiceClient.EnterSpeakingStateAsync(
-                new SpeakingProperties(SpeakingFlags.Microphone), cancellationToken: cancellationToken);
+            await voiceClient.EnterSpeakingStateAsync(new SpeakingProperties(SpeakingFlags.Microphone), cancellationToken: cancellationToken);
 
             // Start from "speaking", matching the call just made, and let the pump lower it
             // once the linger expires. The audio stream itself is opened lazily per burst,
@@ -127,8 +121,7 @@ public sealed class PlaybackService(
             _pumpTask = Task.Run(() => PumpAsync(_pumpCancellation.Token), CancellationToken.None);
 
             logger.LogInformation("Joined voice channel {ChannelId}", channelId);
-            await LogActivityAsync(
-                log => log.LogJoinAsync(userId, userName, channelId, voiceStates.GetChannelName(channelId)));
+            await LogActivityAsync(log => log.LogJoinAsync(userId, userName, channelId, voiceStates.GetChannelName(channelId)));
 
             events.RaiseConnectionChanged();
             return PlaybackResult.Ok;
@@ -181,8 +174,7 @@ public sealed class PlaybackService(
     /// Plays a sound into the connected channel. Authorization lives here rather than in
     /// the UI: disabled buttons are a hint, this is the rule.
     /// </summary>
-    public async Task<PlaybackResult> PlayAsync(
-        Guid soundId, ulong userId, string userName, CancellationToken cancellationToken = default)
+    public async Task<PlaybackResult> PlayAsync(Guid soundId, ulong userId, string userName, CancellationToken cancellationToken = default)
     {
         if (ConnectedChannelId is not { } channelId)
         {
@@ -291,8 +283,7 @@ public sealed class PlaybackService(
         _mixer.Add(pcm, sound.Id, gain);
 
         var channelName = ConnectedChannelName;
-        await LogActivityAsync(
-            log => log.LogEntrySoundAsync(sound, userId, userName, channelId, channelName));
+        await LogActivityAsync(log => log.LogEntrySoundAsync(sound, userId, userName, channelId, channelName));
 
         // Reusing SoundPlayed rather than adding an entry-specific notification: every new
         // subscription is another handler a component can leak and pin its circuit with.
@@ -313,8 +304,6 @@ public sealed class PlaybackService(
         _playing = new HashSet<Guid>();
         events.RaisePlaybackChanged();
     }
-
-    public int ActiveSoundCount => _mixer.ActiveCount;
 
     private bool IsOnCooldown(ulong userId, out TimeSpan remaining)
     {
@@ -475,8 +464,7 @@ public sealed class PlaybackService(
         }
 
         // PcmFormat.Short matches what PcmMixer produces, so nothing converts in between.
-        _audioStream = new OpusEncodeStream(
-            client.CreateVoiceStream(), PcmFormat.Short, VoiceChannels.Stereo, OpusApplication.Audio);
+        _audioStream = new OpusEncodeStream(client.CreateVoiceStream(), PcmFormat.Short, VoiceChannels.Stereo, OpusApplication.Audio);
 
         return ValueTask.CompletedTask;
     }

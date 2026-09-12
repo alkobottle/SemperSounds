@@ -1,6 +1,5 @@
 using Microsoft.Extensions.Options;
 using SemperSounds.Core.Configuration;
-using SemperSounds.Core.Sounds;
 
 namespace SemperSounds.Web.Services;
 
@@ -37,14 +36,4 @@ public sealed class GuildEmojiProvider(DiscordBotService bot, IOptions<DiscordOp
                 $"<{(emoji.Animated ? "a" : string.Empty)}:{emoji.Name}:{emoji.Id}>"))
             .OrderBy(emoji => emoji.Name, StringComparer.OrdinalIgnoreCase)];
     }
-
-    /// <summary>
-    /// Resolves a stored value for display. Returns null when it is a standard emoji, or
-    /// when a custom one no longer exists on the server — callers then fall back to
-    /// <see cref="SoundEmoji.Display"/>, which still reads as :name:.
-    /// </summary>
-    public string? GetImageUrl(string storedEmoji) =>
-        SoundEmoji.TryParse(storedEmoji, out var emoji) && emoji.IsCustom
-            ? emoji.ImageUrl
-            : null;
 }

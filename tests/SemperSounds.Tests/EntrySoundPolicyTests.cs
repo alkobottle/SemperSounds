@@ -173,8 +173,7 @@ public class EntrySoundPolicyTests
         // Leaving and rejoining is the obvious way to make a bot unbearable.
         var (policy, _) = Create();
 
-        var decision = policy.Decide(
-            Settings, Arrival with { LastEntryPlayedAt = Now.AddSeconds(-30) });
+        var decision = policy.Decide(Settings, Arrival with { LastEntryPlayedAt = Now.AddSeconds(-30) });
 
         Assert.Equal(EntrySoundRefusal.Cooldown, decision.Refusal);
     }
@@ -184,8 +183,7 @@ public class EntrySoundPolicyTests
     {
         var (policy, _) = Create();
 
-        var decision = policy.Decide(
-            Settings, Arrival with { LastEntryPlayedAt = Now.AddSeconds(-61) });
+        var decision = policy.Decide(Settings, Arrival with { LastEntryPlayedAt = Now.AddSeconds(-61) });
 
         Assert.True(decision.ShouldPlay);
     }
@@ -197,9 +195,7 @@ public class EntrySoundPolicyTests
         // rather than "block everything".
         var (policy, _) = Create();
 
-        var decision = policy.Decide(
-            Settings with { PerUserCooldownSeconds = 0 },
-            Arrival with { LastEntryPlayedAt = Now });
+        var decision = policy.Decide(Settings with { PerUserCooldownSeconds = 0 }, Arrival with { LastEntryPlayedAt = Now });
 
         Assert.True(decision.ShouldPlay);
     }

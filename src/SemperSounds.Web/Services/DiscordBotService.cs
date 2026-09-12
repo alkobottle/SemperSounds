@@ -16,10 +16,7 @@ public sealed class DiscordBotService : IHostedService, IDisposable
     private readonly SoundboardEvents _events;
     private readonly ILogger<DiscordBotService> _logger;
 
-    public DiscordBotService(
-        IOptions<DiscordOptions> options,
-        SoundboardEvents events,
-        ILogger<DiscordBotService> logger)
+    public DiscordBotService(IOptions<DiscordOptions> options, SoundboardEvents events, ILogger<DiscordBotService> logger)
     {
         _options = options.Value;
         _events = events;
@@ -114,8 +111,7 @@ public sealed class DiscordBotService : IHostedService, IDisposable
 
         // Logged because this is the entry to the only state in which the UI refuses to
         // work; diagnosing it from the outside otherwise means reading socket counters.
-        _logger.LogWarning(
-            "Discord gateway disconnected (reconnecting: {Reconnect})", args.Reconnect);
+        _logger.LogWarning("Discord gateway disconnected (reconnecting: {Reconnect})", args.Reconnect);
 
         _events.RaiseConnectionChanged();
         return ValueTask.CompletedTask;
@@ -150,8 +146,7 @@ public sealed class DiscordBotService : IHostedService, IDisposable
         // postpone the same silent failure to 250 members.
         try
         {
-            await Client.RequestGuildUsersAsync(
-                new GuildUsersRequestProperties(_options.GuildId) { Query = string.Empty, Limit = 0 });
+            await Client.RequestGuildUsersAsync(new GuildUsersRequestProperties(_options.GuildId) { Query = string.Empty, Limit = 0 });
         }
         catch (Exception ex)
         {
@@ -205,8 +200,7 @@ public sealed class DiscordBotService : IHostedService, IDisposable
 
         try
         {
-            _events.RaiseVoiceMemberArrived(
-                new VoiceArrival(movement.UserId, movement.ToChannelId!.Value));
+            _events.RaiseVoiceMemberArrived(new VoiceArrival(movement.UserId, movement.ToChannelId!.Value));
         }
         catch (Exception ex)
         {

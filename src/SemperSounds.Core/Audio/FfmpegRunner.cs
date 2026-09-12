@@ -45,8 +45,7 @@ internal static class FfmpegRunner
         }
         catch (Exception ex)
         {
-            throw new FfmpegException(
-                $"Could not start '{executable}'. Is ffmpeg installed and on PATH? ({ex.Message})");
+            throw new FfmpegException($"Could not start '{executable}'. Is ffmpeg installed and on PATH? ({ex.Message})");
         }
 
         // Read both streams concurrently: ffmpeg writes progress to stderr, and letting

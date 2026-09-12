@@ -18,19 +18,14 @@ public sealed class EntrySoundLibrary(SoundboardDbContext db)
     /// The server-wide settings. The row is seeded by the model, so this never has to
     /// invent defaults for a missing one.
     /// </summary>
-    public async Task<EntrySoundSettingsSnapshot> GetSettingsAsync(
-        CancellationToken cancellationToken = default)
+    public async Task<EntrySoundSettingsSnapshot> GetSettingsAsync(CancellationToken cancellationToken = default)
     {
         var settings = await db.EntrySoundSettings
             .AsNoTracking()
             .SingleAsync(cancellationToken);
 
-        return new EntrySoundSettingsSnapshot(
-            settings.IsEnabled,
-            settings.SnoozedUntil,
-            settings.VolumePercent,
-            settings.PerUserCooldownSeconds,
-            settings.MaxDurationMs);
+        return new EntrySoundSettingsSnapshot(settings.IsEnabled, settings.SnoozedUntil, settings.VolumePercent,
+            settings.PerUserCooldownSeconds, settings.MaxDurationMs);
     }
 
     /// <summary>One user's assignment, with the sound loaded for display.</summary>
@@ -49,8 +44,7 @@ public sealed class EntrySoundLibrary(SoundboardDbContext db)
             .ToListAsync(cancellationToken);
 
     /// <summary>Picks someone's entry sound, replacing whatever they had before.</summary>
-    public async Task<EntrySoundResult> AssignAsync(
-        ulong userId, Guid soundId, CancellationToken cancellationToken = default)
+    public async Task<EntrySoundResult> AssignAsync(ulong userId, Guid soundId, CancellationToken cancellationToken = default)
     {
         var sound = await db.Sounds
             .AsNoTracking()
@@ -106,8 +100,7 @@ public sealed class EntrySoundLibrary(SoundboardDbContext db)
     }
 
     /// <summary>The user's own switch. Keeps the assignment either way.</summary>
-    public async Task SetMutedAsync(
-        ulong userId, bool muted, CancellationToken cancellationToken = default)
+    public async Task SetMutedAsync(ulong userId, bool muted, CancellationToken cancellationToken = default)
     {
         var existing = await db.EntrySounds
             .SingleOrDefaultAsync(entry => entry.UserId == userId, cancellationToken);
@@ -129,8 +122,7 @@ public sealed class EntrySoundLibrary(SoundboardDbContext db)
             .ToListAsync(cancellationToken)];
 
     /// <summary>The administrator's block on this user, or null when they are not blocked.</summary>
-    public Task<EntrySoundBlock?> FindBlockAsync(
-        ulong userId, CancellationToken cancellationToken = default) =>
+    public Task<EntrySoundBlock?> FindBlockAsync(ulong userId, CancellationToken cancellationToken = default) =>
         db.EntrySoundBlocks
             .AsNoTracking()
             .SingleOrDefaultAsync(block => block.UserId == userId, cancellationToken);

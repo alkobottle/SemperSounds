@@ -120,8 +120,7 @@ public static class BoardView
     /// renders. The Name arm is spelled out rather than relying on the order the library
     /// happens to arrive in.
     /// </remarks>
-    private static IEnumerable<Sound> Sort(
-        IEnumerable<Sound> query, BoardSort sort, IReadOnlyDictionary<Guid, SoundPlayStats> stats) =>
+    private static IEnumerable<Sound> Sort(IEnumerable<Sound> query, BoardSort sort, IReadOnlyDictionary<Guid, SoundPlayStats> stats) =>
         sort switch
         {
             BoardSort.MostPlayed => query
@@ -153,8 +152,7 @@ public static class BoardView
     private static int Plays(IReadOnlyDictionary<Guid, SoundPlayStats> stats, Guid soundId) =>
         stats.TryGetValue(soundId, out var found) ? found.Plays : 0;
 
-    private static DateTimeOffset? LastPlayed(
-        IReadOnlyDictionary<Guid, SoundPlayStats> stats, Guid soundId) =>
+    private static DateTimeOffset? LastPlayed(IReadOnlyDictionary<Guid, SoundPlayStats> stats, Guid soundId) =>
         stats.TryGetValue(soundId, out var found) ? found.LastPlayedAt : null;
 
     private static bool EmojiMatches(string stored, string term) =>

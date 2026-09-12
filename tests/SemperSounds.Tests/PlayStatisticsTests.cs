@@ -30,8 +30,7 @@ public sealed class PlayStatisticsTests : IDisposable
         _connection = new SqliteConnection("Data Source=:memory:");
         _connection.Open();
 
-        _db = new SoundboardDbContext(
-            new DbContextOptionsBuilder<SoundboardDbContext>().UseSqlite(_connection).Options);
+        _db = new SoundboardDbContext(new DbContextOptionsBuilder<SoundboardDbContext>().UseSqlite(_connection).Options);
         _db.Database.EnsureCreated();
 
         _stats = new PlayStatistics(_db, _time);
@@ -51,9 +50,7 @@ public sealed class PlayStatisticsTests : IDisposable
         return sound;
     }
 
-    private async Task LogAsync(
-        Guid soundId, DateTimeOffset when,
-        SoundboardActivity kind = SoundboardActivity.Played, ulong? userId = Alice)
+    private async Task LogAsync(Guid soundId, DateTimeOffset when, SoundboardActivity kind = SoundboardActivity.Played, ulong? userId = Alice)
     {
         _db.ActivityLog.Add(new ActivityLogEntry
         {

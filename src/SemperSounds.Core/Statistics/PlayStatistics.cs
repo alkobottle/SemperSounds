@@ -6,12 +6,7 @@ namespace SemperSounds.Core.Statistics;
 /// <param name="Plays">Button presses only — <see cref="SoundboardActivity.Played"/>, never
 /// <see cref="SoundboardActivity.EntryPlayed"/>.</param>
 /// <param name="LastPlayedAt">Null only when nobody has ever pressed it.</param>
-public readonly record struct SoundPlayStats(
-    Guid SoundId,
-    int Plays,
-    int PlaysThisWeek,
-    int PlaysPreviousWeek,
-    DateTimeOffset? LastPlayedAt)
+public readonly record struct SoundPlayStats(Guid SoundId, int Plays, int PlaysThisWeek, int PlaysPreviousWeek, DateTimeOffset? LastPlayedAt)
 {
     /// <summary>
     /// Played more this week than last, and often enough this week to be worth saying so.
@@ -50,8 +45,7 @@ public readonly record struct TopUser(ulong UserId, string UserName, int Plays);
 /// The sound is gone from the library but its plays survive: the log holds no foreign key to
 /// <c>Sound</c> precisely so history outlives a deletion anyone is allowed to perform.
 /// </param>
-public readonly record struct TopSound(
-    Guid SoundId, string SoundName, string Emoji, bool IsDeleted, int Plays, DateTimeOffset? LastPlayedAt);
+public readonly record struct TopSound(Guid SoundId, string SoundName, string Emoji, bool IsDeleted, int Plays, DateTimeOffset? LastPlayedAt);
 
 /// <param name="Day">A server-local day. This guild is effectively one timezone, and a
 /// browser offset would cost a JS round trip on every load.</param>
@@ -77,8 +71,7 @@ public sealed class PlayStatistics(SoundboardDbContext db, TimeProvider? timePro
     /// Plays per sound, keyed by id. A sound nobody has ever pressed is absent rather than
     /// present with a zero, so callers treat a missing key as "never played".
     /// </summary>
-    public async Task<IReadOnlyDictionary<Guid, SoundPlayStats>> GetPerSoundAsync(
-        CancellationToken cancellationToken = default) =>
+    public async Task<IReadOnlyDictionary<Guid, SoundPlayStats>> GetPerSoundAsync(CancellationToken cancellationToken = default) =>
         await BuildPerSoundQuery(_clock.GetUtcNow())
             .ToDictionaryAsync(stats => stats.SoundId, cancellationToken);
 
@@ -87,8 +80,7 @@ public sealed class PlayStatistics(SoundboardDbContext db, TimeProvider? timePro
     /// than null when nobody has pressed it, so the caller renders "never played" instead of
     /// branching.
     /// </summary>
-    public async Task<SoundPlayDetail> GetForSoundAsync(
-        Guid soundId, CancellationToken cancellationToken = default)
+    public async Task<SoundPlayDetail> GetForSoundAsync(Guid soundId, CancellationToken cancellationToken = default)
     {
         var weekAgo = _clock.GetUtcNow().AddDays(-TrendingWindowDays);
 
@@ -125,12 +117,7 @@ public sealed class PlayStatistics(SoundboardDbContext db, TimeProvider? timePro
             .OrderByDescending(user => user.Plays)
             .FirstOrDefaultAsync(cancellationToken);
 
-        return new SoundPlayDetail(
-            soundId,
-            totals.Plays,
-            totals.ThisWeek,
-            totals.First,
-            totals.Last,
+        return new SoundPlayDetail(soundId, totals.Plays, totals.ThisWeek, totals.First, totals.Last,
             top is null ? null : new TopUser(top.UserId, top.UserName, top.Plays));
     }
 
@@ -141,8 +128,7 @@ public sealed class PlayStatistics(SoundboardDbContext db, TimeProvider? timePro
     /// <summary>
     /// The most-pressed sounds, deleted ones included and flagged.
     /// </summary>
-    public async Task<IReadOnlyList<TopSound>> GetTopSoundsAsync(
-        int count, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<TopSound>> GetTopSoundsAsync(int count, CancellationToken cancellationToken = default)
     {
         // Grouped by id, never by the denormalized name: anyone can rename a sound, and
         // grouping by name would split one clip into two rows the moment they did.
@@ -184,8 +170,7 @@ public sealed class PlayStatistics(SoundboardDbContext db, TimeProvider? timePro
     }
 
     /// <summary>Who presses the most buttons.</summary>
-    public async Task<IReadOnlyList<TopUser>> GetTopUsersAsync(
-        int count, CancellationToken cancellationToken = default) =>
+    public async Task<IReadOnlyList<TopUser>> GetTopUsersAsync(int count, CancellationToken cancellationToken = default) =>
         [
             .. (await db.ActivityLog.AsNoTracking()
                 // The Kind filter already excludes them, but automatic departures are the
@@ -214,8 +199,7 @@ public sealed class PlayStatistics(SoundboardDbContext db, TimeProvider? timePro
     /// it rather than the whole log — which is what makes reading rows acceptable here and
     /// not elsewhere.
     /// </remarks>
-    public async Task<IReadOnlyList<PlaysOnDay>> GetPlaysPerDayAsync(
-        int days, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<PlaysOnDay>> GetPlaysPerDayAsync(int days, CancellationToken cancellationToken = default)
     {
         var today = DateOnly.FromDateTime(_clock.GetLocalNow().DateTime);
         var firstDay = today.AddDays(-(days - 1));

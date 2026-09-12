@@ -394,6 +394,26 @@ The rewrite must happen on the request (not just on redirects) so the `redirect_
 during the OAuth *token exchange* matches too. Getting this wrong makes Discord reject
 logins in production while development works fine.
 
+## Code formatting
+
+Conserve vertical space and avoid unnecessary line breaks when readability is preserved. Assume developers use at least widescreen monitors;
+prefer keeping readable expressions, method calls, declarations, and markup on one line instead of wrapping to a narrow column limit.
+Use line breaks and blank lines when they improve clarity or separate logical sections.
+
+## Code cleanup
+
+When creating or modifying code, remove unused `using` directives, variables, fields,
+properties, methods, parameters, and other dead code in the affected area. Verify that
+members are truly unused before removing them, including uses through Razor bindings,
+reflection, serialization, dependency injection, and framework conventions.
+
+## Version control
+
+After creating files intended to be part of the project, stage them with
+`git add` using explicit file paths. Do not stage secrets, generated build
+output, temporary files, or unrelated user changes. Respect `.gitignore`;
+never force-add ignored files. Do not commit or push unless requested.
+
 ## Configuration
 
 Config binds identically from `appsettings.Development.json` and container env vars —

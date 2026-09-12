@@ -15,8 +15,7 @@ public sealed class ActivityLogTests : IDisposable
     {
         _connection = new SqliteConnection("Data Source=:memory:");
         _connection.Open();
-        _db = new SoundboardDbContext(
-            new DbContextOptionsBuilder<SoundboardDbContext>().UseSqlite(_connection).Options);
+        _db = new SoundboardDbContext(new DbContextOptionsBuilder<SoundboardDbContext>().UseSqlite(_connection).Options);
         _db.Database.EnsureCreated();
         _log = new ActivityLog(_db);
     }
@@ -64,9 +63,7 @@ public sealed class ActivityLogTests : IDisposable
 
         var recent = await _log.GetRecentAsync(10);
 
-        Assert.Equal(
-            [SoundboardActivity.Left, SoundboardActivity.Played, SoundboardActivity.Joined],
-            recent.Select(e => e.Kind));
+        Assert.Equal([SoundboardActivity.Left, SoundboardActivity.Played, SoundboardActivity.Joined], recent.Select(e => e.Kind));
     }
 
     [Fact]

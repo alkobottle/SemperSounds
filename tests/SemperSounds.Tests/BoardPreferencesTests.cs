@@ -27,8 +27,7 @@ public class BoardPreferencesTests
         // A Discord snowflake exceeds Number.MAX_SAFE_INTEGER. Stored as a JSON number, any
         // JSON.parse in the browser rounds it silently and the uploader filter then matches
         // nobody — with no error anywhere to explain why the board went empty.
-        var json = BoardPreferencesJson.Serialize(
-            new BoardPreferences(UploaderId: 1234567890123456789));
+        var json = BoardPreferencesJson.Serialize(new BoardPreferences(UploaderId: 1234567890123456789));
 
         Assert.Contains("\"uploaderId\":\"1234567890123456789\"", json);
     }
@@ -72,8 +71,7 @@ public class BoardPreferencesTests
     public void UnknownFilterNames_AreIgnoredRatherThanDiscardingTheRest()
     {
         // A preference saved by a newer build should degrade to the part this one understands.
-        var restored = BoardPreferencesJson.Deserialize(
-            """{"filters":["Untagged","ByVibes"]}""");
+        var restored = BoardPreferencesJson.Deserialize("""{"filters":["Untagged","ByVibes"]}""");
 
         Assert.Equal(BoardFilter.Untagged, restored.Filters);
     }

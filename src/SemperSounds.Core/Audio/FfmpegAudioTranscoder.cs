@@ -8,9 +8,7 @@ namespace SemperSounds.Core.Audio;
 /// Produces the two artifacts every sound needs, in one ffmpeg pass:
 /// canonical PCM for the mixer and a normalized mp3 for browser preview.
 /// </summary>
-public sealed class FfmpegAudioTranscoder(
-    IOptions<SoundboardOptions> options,
-    ILogger<FfmpegAudioTranscoder> logger) : IAudioTranscoder
+public sealed class FfmpegAudioTranscoder(IOptions<SoundboardOptions> options, ILogger<FfmpegAudioTranscoder> logger) : IAudioTranscoder
 {
     private readonly SoundboardOptions _options = options.Value;
 
@@ -39,8 +37,7 @@ public sealed class FfmpegAudioTranscoder(
 
         if (result.ExitCode != 0)
         {
-            throw new FfmpegException(
-                $"ffmpeg failed to convert the upload (exit {result.ExitCode}): {Tail(result.StandardError)}");
+            throw new FfmpegException($"ffmpeg failed to convert the upload (exit {result.ExitCode}): {Tail(result.StandardError)}");
         }
 
         if (!File.Exists(pcmDestinationPath) || new FileInfo(pcmDestinationPath).Length == 0)

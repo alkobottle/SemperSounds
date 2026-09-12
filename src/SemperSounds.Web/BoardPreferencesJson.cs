@@ -37,11 +37,7 @@ public static class BoardPreferencesJson
     /// </param>
     /// <param name="Sort">Stored by name: stored JSON outlives the enum, and by number a
     /// reordered member would repoint an existing choice at a different sort.</param>
-    private sealed record Stored(
-        string? Sort = null,
-        string[]? Filters = null,
-        string? UploaderId = null,
-        string[]? Tags = null);
+    private sealed record Stored(string? Sort = null, string[]? Filters = null, string? UploaderId = null, string[]? Tags = null);
 
     public static string Serialize(BoardPreferences preferences) =>
         JsonSerializer.Serialize(

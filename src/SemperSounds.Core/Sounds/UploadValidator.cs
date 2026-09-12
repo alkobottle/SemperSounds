@@ -26,10 +26,7 @@ public sealed class UploadValidator(IAudioProbe probe, IOptions<SoundboardOption
 {
     private readonly SoundboardOptions _options = options.Value;
 
-    public async Task<UploadValidationResult> ValidateAsync(
-        string filePath,
-        long fileSizeBytes,
-        TrimRequest? trim = null,
+    public async Task<UploadValidationResult> ValidateAsync(string filePath, long fileSizeBytes, TrimRequest? trim = null,
         CancellationToken cancellationToken = default)
     {
         if (fileSizeBytes > _options.MaxUploadBytes)
@@ -43,8 +40,7 @@ public sealed class UploadValidator(IAudioProbe probe, IOptions<SoundboardOption
 
         if (!probeResult.HasAudioStream)
         {
-            return UploadValidationResult.Invalid(
-                "That file has no audio stream that ffmpeg can read. Upload an mp3, wav, ogg or m4a.");
+            return UploadValidationResult.Invalid("That file has no audio stream that ffmpeg can read. Upload an mp3, wav, ogg or m4a.");
         }
 
         var sourceSeconds = probeResult.Duration.TotalSeconds;

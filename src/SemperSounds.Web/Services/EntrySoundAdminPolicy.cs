@@ -21,8 +21,7 @@ public sealed class EntrySoundAdminRequirement : IAuthorizationRequirement;
 public sealed class EntrySoundAdminHandler(IGuildPermissions permissions)
     : AuthorizationHandler<EntrySoundAdminRequirement>
 {
-    protected override Task HandleRequirementAsync(
-        AuthorizationHandlerContext context, EntrySoundAdminRequirement requirement)
+    protected override Task HandleRequirementAsync(AuthorizationHandlerContext context, EntrySoundAdminRequirement requirement)
     {
         if (context.User.Identity?.IsAuthenticated == true &&
             permissions.IsAdministrator(context.User.GetDiscordUserId()) is true)
