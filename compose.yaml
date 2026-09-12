@@ -25,5 +25,11 @@ services:
       - ./data:/data
     ports:
       # Bound to loopback: the reverse proxy in front of this is what faces the
-      # internet. Change to "8080:8080" only if nothing else terminates TLS.
-      - "127.0.0.1:8080:8080"
+      # internet. Drop the 127.0.0.1 prefix only if nothing else terminates TLS.
+      #
+      # The host port is a variable because it is not free on every machine — a Pi-hole
+      # admin server holds 8080 on one of them. Set SEMPERSOUNDS_PORT in .env there rather
+      # than editing this line, or the local edit makes the git pull in deploy.sh refuse
+      # to run. The container side stays 8080 always, which is what the HEALTHCHECK and
+      # the reverse proxy upstream both expect.
+      - "127.0.0.1:${SEMPERSOUNDS_PORT:-8080}:8080"
