@@ -32,7 +32,7 @@
                 @foreach (var favorite in _favorites)
                 {
                     var sound = favorite.Sound!;
-                    <MudItem xs="6" sm="4" md="4" lg="3">
+                    <MudItem xs="6" sm="4" md="3" lg="2">
                         <MudPaper Class="pa-2" Elevation="3" Style="border-left: 3px solid var(--mud-palette-warning);">
                             <div class="d-flex align-center mb-1" style="gap: 8px;">
                                 <SoundEmojiView Value="@sound.Emoji" Size="28" />
@@ -260,7 +260,7 @@
                     var isPlaying = _playingIds.Contains(sound.Id);
                     var isEntrySound = _entrySoundId == sound.Id;
 
-                    <MudItem xs="6" sm="4" md="4" lg="3">
+                    <MudItem xs="6" sm="4" md="3" lg="2">
                         <MudPaper Class="pa-3 d-flex flex-column" Style="height: 100%;" Elevation="2">
                             <div class="d-flex align-start" style="gap: 10px;">
                                 <SoundEmojiView Value="@sound.Emoji" Size="34" />
