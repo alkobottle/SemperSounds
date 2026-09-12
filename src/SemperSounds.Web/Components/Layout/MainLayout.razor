@@ -1,5 +1,7 @@
 @inherits LayoutComponentBase
+@implements IDisposable
 @inject Microsoft.Extensions.Options.IOptions<SemperSounds.Core.Configuration.AppOptions> AppSettings
+@inject NavigationManager Navigation
 
 @* MudBlazor's providers must render interactively or dialogs, snackbars and popovers
    silently do nothing. App.razor puts InteractiveServer on Routes globally, which covers this. *@
@@ -26,19 +28,24 @@
             <Authorized>
                 <MudHidden Breakpoint="Breakpoint.SmAndDown">
                     <div class="d-flex align-center ml-6">
-                        <MudButton Href="/board" StartIcon="@Icons.Material.Filled.Apps" Color="Color.Inherit">Board</MudButton>
-                        <MudButton Href="/upload" StartIcon="@Icons.Material.Filled.Upload" Color="Color.Inherit">Upload</MudButton>
+                        @* The active destination is marked with a class rather than a Color or a
+                           filled Variant: this bar already needs ~690px and anything that changes
+                           a button's width spends room it does not have. *@
+                        <MudButton Href="/board" StartIcon="@Icons.Material.Filled.Apps" Color="Color.Inherit" Class="@(ActiveClass("/board"))">Board</MudButton>
+                        <MudButton Href="/upload" StartIcon="@Icons.Material.Filled.Upload" Color="Color.Inherit" Class="@(ActiveClass("/upload"))">Upload</MudButton>
                         @* Labelled "Entry" rather than "Entry sound" to keep the fixed width
                            of this bar inside the md breakpoint. *@
-                        <MudButton Href="/entry-sound" StartIcon="@Icons.Material.Filled.SensorDoor" Color="Color.Inherit">Entry</MudButton>
+                        <MudButton Href="/entry-sound" StartIcon="@Icons.Material.Filled.SensorDoor" Color="Color.Inherit" Class="@(ActiveClass("/entry-sound"))">Entry</MudButton>
                         @* Stats and Log share a menu rather than each taking a slot: this bar
                            already needs ~690px of fixed content and a fifth button wraps it. *@
+                        @* The activator has no Href of its own, so it lights up from its children. *@
                         <MudMenu Icon="@Icons.Material.Filled.History"
                                  Label="History"
                                  Color="Color.Inherit"
-                                 Dense="true">
-                            <MudMenuItem Href="/log" Icon="@Icons.Material.Filled.History">Log</MudMenuItem>
-                            <MudMenuItem Href="/stats" Icon="@Icons.Material.Filled.Leaderboard">Stats</MudMenuItem>
+                                 Dense="true"
+                                 Class="@(NavDestination.ClassForGroup(_path, "/log", "/stats"))">
+                            <MudMenuItem Href="/log" Icon="@Icons.Material.Filled.History" Class="@(ActiveClass("/log"))">Log</MudMenuItem>
+                            <MudMenuItem Href="/stats" Icon="@Icons.Material.Filled.Leaderboard" Class="@(ActiveClass("/stats"))">Stats</MudMenuItem>
                         </MudMenu>
                     </div>
                 </MudHidden>
@@ -49,11 +56,13 @@
                              AriaLabel="Menu"
                              Dense="true"
                              Class="ml-1">
-                        <MudMenuItem Href="/board" Icon="@Icons.Material.Filled.Apps">Board</MudMenuItem>
-                        <MudMenuItem Href="/upload" Icon="@Icons.Material.Filled.Upload">Upload</MudMenuItem>
-                        <MudMenuItem Href="/entry-sound" Icon="@Icons.Material.Filled.SensorDoor">Entry sound</MudMenuItem>
-                        <MudMenuItem Href="/log" Icon="@Icons.Material.Filled.History">Log</MudMenuItem>
-                        <MudMenuItem Href="/stats" Icon="@Icons.Material.Filled.Leaderboard">Stats</MudMenuItem>
+                        @* Flat here: Log and Stats are peers rather than a submenu, so this
+                           variant has five destinations to the desktop row's four. *@
+                        <MudMenuItem Href="/board" Icon="@Icons.Material.Filled.Apps" Class="@(ActiveClass("/board"))">Board</MudMenuItem>
+                        <MudMenuItem Href="/upload" Icon="@Icons.Material.Filled.Upload" Class="@(ActiveClass("/upload"))">Upload</MudMenuItem>
+                        <MudMenuItem Href="/entry-sound" Icon="@Icons.Material.Filled.SensorDoor" Class="@(ActiveClass("/entry-sound"))">Entry sound</MudMenuItem>
+                        <MudMenuItem Href="/log" Icon="@Icons.Material.Filled.History" Class="@(ActiveClass("/log"))">Log</MudMenuItem>
+                        <MudMenuItem Href="/stats" Icon="@Icons.Material.Filled.Leaderboard" Class="@(ActiveClass("/stats"))">Stats</MudMenuItem>
                     </MudMenu>
                 </MudHidden>
 
@@ -112,6 +121,28 @@
 </MudLayout>
 
 @code {
+    private string _path = string.Empty;
+
+    protected override void OnInitialized()
+    {
+        _path = Navigation.ToBaseRelativePath(Navigation.Uri);
+        Navigation.LocationChanged += OnLocationChanged;
+    }
+
+    /// <remarks>The layout is not re-initialised when the page changes, so without this the
+    /// indicator would stick to whichever route the circuit happened to start on.</remarks>
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        _path = Navigation.ToBaseRelativePath(e.Location);
+        StateHasChanged();
+    }
+
+    /// <remarks>A layout lives as long as the circuit, so a handler left attached pins it —
+    /// the same rule every SoundboardEvents subscriber follows.</remarks>
+    public void Dispose() => Navigation.LocationChanged -= OnLocationChanged;
+
+    private string? ActiveClass(string href) => NavDestination.ClassFor(_path, href);
+
     private string BuildTooltip =>
         string.IsNullOrWhiteSpace(AppSettings.Value.BuiltAt) || AppSettings.Value.BuiltAt == "unknown"
             ? "Not built through Docker"

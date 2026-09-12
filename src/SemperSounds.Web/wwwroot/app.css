@@ -87,3 +87,42 @@ html, body {
     right: 0.75rem;
     top: 0.5rem;
 }
+
+/* Marks the nav destination currently being viewed, in both the desktop button row and the
+   mobile menu.
+
+   An accent bar rather than a Primary text colour, for two reasons. The app bar is #1E1F22
+   and the primary is Discord blurple #5865F2, which is a marginal contrast ratio for text
+   but comfortably clears the lower bar a non-text indicator is held to. And the desktop row
+   needs ~690px of fixed content already, so anything that changes a button's width — a
+   filled Variant, extra padding — spends space the bar does not have. A pseudo-element
+   costs none.
+
+   Geometry flips by context: inside the app bar the bar sits under the item, while menu
+   items render into the popover provider outside it and take a leading edge bar instead.
+   Keyed on the app bar rather than on MudBlazor's own class names, which are not contract. */
+.ss-nav-active {
+    position: relative;
+    font-weight: 600;
+}
+
+.ss-nav-active::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 6px;
+    bottom: 6px;
+    width: 3px;
+    border-radius: 0 2px 2px 0;
+    background: var(--mud-palette-primary);
+}
+
+.mud-appbar .ss-nav-active::after {
+    left: 8px;
+    right: 8px;
+    top: auto;
+    bottom: 2px;
+    width: auto;
+    height: 2px;
+    border-radius: 1px;
+}
