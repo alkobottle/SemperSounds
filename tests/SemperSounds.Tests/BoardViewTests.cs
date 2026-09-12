@@ -258,4 +258,81 @@ public class BoardViewTests
 
         Assert.Equal(["airhorn blast"], Names(result));
     }
+
+    [Fact]
+    public void MatchAny_UnionsEveryDimension()
+    {
+        // The mirror of EveryFilter_ComposesAsAnd. Under Any a sound needs one reason to be
+        // shown, not all of them, and the reasons come from different dimensions.
+        var byName = MakeSound("airhorn blast", tags: "calm", uploaderId: 9);
+        var byUploader = MakeSound("piano", tags: "calm", uploaderId: 7);
+        var byTag = MakeSound("guitar", tags: "meme", uploaderId: 9);
+        var noReason = MakeSound("violin", tags: "calm", uploaderId: 9);
+
+        var result = Apply(
+            [byName, byUploader, byTag, noReason],
+            new BoardPreferences(UploaderId: 7, Tags: ["meme"], Match: BoardMatch.Any),
+            search: "airhorn");
+
+        Assert.Equal(["airhorn blast", "guitar", "piano"], Names(result));
+    }
+
+    [Fact]
+    public void MatchAny_WithNothingSelected_StillShowsEverything()
+    {
+        // Any over an empty clause list is false, so without an explicit guard for "no
+        // criteria" an untouched board in this mode would render blank — with no filter set
+        // anywhere to explain why. The single most likely way to ship this broken.
+        var sounds = new[] { MakeSound("alpha"), MakeSound("beta") };
+
+        Assert.Equal(["alpha", "beta"], Names(Apply(sounds, new BoardPreferences(Match: BoardMatch.Any))));
+        Assert.Equal(["alpha", "beta"], Names(Apply(sounds, new BoardPreferences(Match: BoardMatch.All))));
+    }
+
+    [Fact]
+    public void OneCriterion_MeansTheSameInBothModes()
+    {
+        // All and Any differ only in how they combine; with a single clause there is nothing
+        // to combine, so the two must agree or one of them is wrong.
+        var sounds = new[] { MakeSound("airhorn", tags: "meme"), MakeSound("piano", tags: "calm") };
+
+        var all = Apply(sounds, new BoardPreferences(Tags: ["meme"], Match: BoardMatch.All));
+        var any = Apply(sounds, new BoardPreferences(Tags: ["meme"], Match: BoardMatch.Any));
+
+        Assert.Equal(Names(all), Names(any));
+        Assert.Equal(["airhorn"], Names(any));
+    }
+
+    [Fact]
+    public void MatchAny_LoosensTheTagChipsThemselves()
+    {
+        // The chip row is multi-valued, so the mode reaches inside it too: All wants every
+        // selected tag on the sound, Any wants one of them.
+        var both = MakeSound("both", tags: "meme,loud");
+        var onlyMeme = MakeSound("one", tags: "meme");
+        var neither = MakeSound("none", tags: "calm");
+
+        var all = Apply([both, onlyMeme, neither], new BoardPreferences(Tags: ["meme", "loud"]));
+        var any = Apply([both, onlyMeme, neither], new BoardPreferences(Tags: ["meme", "loud"], Match: BoardMatch.Any));
+
+        Assert.Equal(["both"], Names(all));
+        Assert.Equal(["both", "one"], Names(any));
+    }
+
+    [Fact]
+    public void MatchAny_CountsTheToggleChipsAsReasonsToShow()
+    {
+        // Flags narrow under All and widen under Any like everything else — a favourite that
+        // matches nothing else still earns its place.
+        var favourite = MakeSound("starred", tags: "calm");
+        var tagged = MakeSound("tagged", tags: "meme");
+        var neither = MakeSound("plain", tags: "calm");
+
+        var result = Apply(
+            [favourite, tagged, neither],
+            new BoardPreferences(Filters: BoardFilter.FavouritesOnly, Tags: ["meme"], Match: BoardMatch.Any),
+            favorites: new HashSet<Guid> { favourite.Id });
+
+        Assert.Equal(["starred", "tagged"], Names(result));
+    }
 }

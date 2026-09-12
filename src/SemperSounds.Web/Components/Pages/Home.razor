@@ -131,13 +131,30 @@
             }
 
             @* Kept, and now doing more work than before: with a sort and four filters there
-               are more ways to be looking at a subset than there used to be. *@
+               are more ways to be looking at a subset than there used to be. Reads as
+               "showing x of y" rather than "narrowed to x" — under Match any the filters
+               widen the result rather than narrowing it. *@
             <MudText Typo="Typo.body2" Class="mud-text-secondary flex-shrink-0">
                 @_filtered.Count / @_all.Count
             </MudText>
         </div>
 
         <div class="d-flex align-center flex-wrap gap-2 mb-4">
+            @* How the active filters combine. Only worth showing once more than one of them
+               is on — with a single criterion the two modes are the same answer. *@
+            @if (ActiveFilterCount > 1)
+            {
+                <MudToggleGroup T="BoardMatch"
+                                Value="_preferences.Match"
+                                ValueChanged="MatchChanged"
+                                Size="Size.Small"
+                                Color="Color.Primary"
+                                CheckMark="true">
+                    <MudToggleItem Value="@BoardMatch.All" Text="Match all" />
+                    <MudToggleItem Value="@BoardMatch.Any" Text="Match any" />
+                </MudToggleGroup>
+            }
+
             <MudChipSet T="BoardFilter"
                         @bind-SelectedValues="_selectedFilters"
                         @bind-SelectedValues:after="FiltersChanged"
@@ -537,6 +554,21 @@
         ApplyView();
         return SavePreferencesAsync();
     }
+
+    private Task MatchChanged(BoardMatch match)
+    {
+        _preferences = _preferences with { Match = match };
+        ApplyView();
+        return SavePreferencesAsync();
+    }
+
+    /// <summary>How many filter dimensions are active, counting each as one however many
+    /// values it holds — the toggle only means something once two of them are on.</summary>
+    private int ActiveFilterCount =>
+        (string.IsNullOrWhiteSpace(_search) ? 0 : 1)
+        + (_selectedTags.Count > 0 ? 1 : 0)
+        + (_preferences.UploaderId is null ? 0 : 1)
+        + _selectedFilters.Count;
 
     /// <summary>
     /// Uploaders present in the library, most prolific first. Rebuilt wherever the tag list

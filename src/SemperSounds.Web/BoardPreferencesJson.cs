@@ -37,7 +37,9 @@ public static class BoardPreferencesJson
     /// </param>
     /// <param name="Sort">Stored by name: stored JSON outlives the enum, and by number a
     /// reordered member would repoint an existing choice at a different sort.</param>
-    private sealed record Stored(string? Sort = null, string[]? Filters = null, string? UploaderId = null, string[]? Tags = null);
+    /// <param name="Match">Absent in anything written before the toggle existed, which
+    /// reads back as All — the behaviour those boards were saved with.</param>
+    private sealed record Stored(string? Sort = null, string[]? Filters = null, string? UploaderId = null, string[]? Tags = null, string? Match = null);
 
     public static string Serialize(BoardPreferences preferences) =>
         JsonSerializer.Serialize(
@@ -47,7 +49,8 @@ public static class BoardPreferencesJson
                     .Where(flag => flag != BoardFilter.None && preferences.Filters.HasFlag(flag))
                     .Select(flag => flag.ToString())],
                 preferences.UploaderId?.ToString(),
-                preferences.Tags is { Count: > 0 } tags ? [.. tags] : null),
+                preferences.Tags is { Count: > 0 } tags ? [.. tags] : null,
+                preferences.Match.ToString()),
             Options);
 
     public static BoardPreferences Deserialize(string? json)
@@ -87,6 +90,7 @@ public static class BoardPreferencesJson
             Enum.TryParse<BoardSort>(stored.Sort, out var sort) ? sort : BoardSort.Name,
             filters,
             ulong.TryParse(stored.UploaderId, out var uploaderId) ? uploaderId : null,
-            stored.Tags);
+            stored.Tags,
+            Enum.TryParse<BoardMatch>(stored.Match, out var match) ? match : BoardMatch.All);
     }
 }

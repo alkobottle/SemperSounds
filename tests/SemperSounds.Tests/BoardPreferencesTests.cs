@@ -92,4 +92,32 @@ public class BoardPreferencesTests
         Assert.Equal(BoardSort.Name, BoardPreferencesJson.Deserialize(json).Sort);
         Assert.Null(BoardPreferencesJson.Deserialize(json).UploaderId);
     }
+
+    [Fact]
+    public void MatchMode_SurvivesARoundTrip()
+    {
+        var restored = BoardPreferencesJson.Deserialize(
+            BoardPreferencesJson.Serialize(new BoardPreferences(Match: BoardMatch.Any)));
+
+        Assert.Equal(BoardMatch.Any, restored.Match);
+    }
+
+    [Fact]
+    public void AStoredBoardWithoutAMatchMode_ReadsAsAll()
+    {
+        // Everything saved before the toggle existed has no such field, and those boards were
+        // saved under the old always-narrowing behaviour. Defaulting to Any would silently
+        // widen every one of them on the next visit.
+        var restored = BoardPreferencesJson.Deserialize("""{"sort":"Name","filters":[]}""");
+
+        Assert.Equal(BoardMatch.All, restored.Match);
+    }
+
+    [Fact]
+    public void AnUnknownMatchMode_FallsBackToAll()
+    {
+        var restored = BoardPreferencesJson.Deserialize("""{"match":"Whichever"}""");
+
+        Assert.Equal(BoardMatch.All, restored.Match);
+    }
 }

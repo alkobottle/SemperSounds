@@ -29,13 +29,24 @@ public enum BoardFilter
     Untagged = 4,
 }
 
-/// <param name="Tags">Every selected tag must be present, matching the chip row's behaviour.</param>
+/// <remarks>How the active filters combine. Persisted by name, as the other two are.</remarks>
+public enum BoardMatch
+{
+    All = 0,
+    Any = 1,
+}
+
+/// <param name="Tags">Under <see cref="BoardMatch.All"/> every selected tag must be present;
+/// under <see cref="BoardMatch.Any"/> one is enough.</param>
 /// <param name="UploaderId">Null means any uploader.</param>
+/// <param name="Match">Defaulted to <see cref="BoardMatch.All"/>, which is how the board
+/// behaved before the toggle existed — so a stored preference without it reads as unchanged.</param>
 public sealed record BoardPreferences(
     BoardSort Sort = BoardSort.Name,
     BoardFilter Filters = BoardFilter.None,
     ulong? UploaderId = null,
-    IReadOnlyList<string>? Tags = null);
+    IReadOnlyList<string>? Tags = null,
+    BoardMatch Match = BoardMatch.All);
 
 /// <summary>
 /// Turns the library plus the viewer's choices into the list of tiles to render.
@@ -59,7 +70,13 @@ public static class BoardView
         return [.. Sort(query, preferences.Sort, stats)];
     }
 
-    /// <remarks>Every clause narrows: they compose as AND, never as OR.</remarks>
+    /// <remarks>
+    /// Built as a list of clauses rather than chained <c>Where</c> calls because the viewer
+    /// chooses how they compose. Only the criteria actually in use contribute one — an empty
+    /// search box or an unselected chip has to be absent, not a clause that happens to be
+    /// true, or <see cref="BoardMatch.Any"/> would match the whole library the moment any one
+    /// dimension was left alone.
+    /// </remarks>
     private static IEnumerable<Sound> Filter(
         IEnumerable<Sound> sounds,
         BoardPreferences preferences,
@@ -67,15 +84,17 @@ public static class BoardView
         IReadOnlySet<Guid> favorites,
         IReadOnlyDictionary<Guid, SoundPlayStats> stats)
     {
-        var query = sounds;
+        var clauses = new List<Func<Sound, bool>>();
 
         if (!string.IsNullOrWhiteSpace(search))
         {
             var term = search.Trim();
 
-            // Matching the custom emoji's name is what makes emoji findable at all:
-            // you cannot type :kekw: into the box, but you can type "kekw".
-            query = query.Where(s =>
+            // One clause, not three: the name/tag/emoji arms are how a single search term is
+            // evaluated, and they stay an OR in both modes. Matching the custom emoji's name
+            // is what makes emoji findable at all — you cannot type :kekw: into the box, but
+            // you can type "kekw".
+            clauses.Add(s =>
                 s.Name.Contains(term, StringComparison.OrdinalIgnoreCase) ||
                 s.Tags.Contains(term, StringComparison.OrdinalIgnoreCase) ||
                 EmojiMatches(s.Emoji, term));
@@ -83,22 +102,26 @@ public static class BoardView
 
         if (preferences.Tags is { Count: > 0 } tags)
         {
-            query = query.Where(s => tags.All(tag => s.TagList.Contains(tag)));
+            // The chip row is itself multi-valued, so the mode reaches inside it: All wants
+            // every selected tag present, Any wants one of them.
+            clauses.Add(preferences.Match == BoardMatch.All
+                ? s => tags.All(tag => s.TagList.Contains(tag))
+                : s => tags.Any(tag => s.TagList.Contains(tag)));
         }
 
         if (preferences.UploaderId is { } uploaderId)
         {
-            query = query.Where(s => s.UploaderId == uploaderId);
+            clauses.Add(s => s.UploaderId == uploaderId);
         }
 
         if (preferences.Filters.HasFlag(BoardFilter.FavouritesOnly))
         {
-            query = query.Where(s => favorites.Contains(s.Id));
+            clauses.Add(s => favorites.Contains(s.Id));
         }
 
         if (preferences.Filters.HasFlag(BoardFilter.Untagged))
         {
-            query = query.Where(s => !s.TagList.Any());
+            clauses.Add(s => !s.TagList.Any());
         }
 
         // The aggregate leaves out sounds nobody has pressed rather than returning zeros,
@@ -106,10 +129,17 @@ public static class BoardView
         // therefore counts as never played, which follows from counting presses only.
         if (preferences.Filters.HasFlag(BoardFilter.NeverPlayed))
         {
-            query = query.Where(s => !stats.ContainsKey(s.Id));
+            clauses.Add(s => !stats.ContainsKey(s.Id));
         }
 
-        return query;
+        // An untouched board is the common case and must show everything. Falling through to
+        // the Any branch would not: Any over an empty list is false, so the board would come
+        // up blank with no filter set to explain it.
+        if (clauses.Count == 0) return sounds;
+
+        return preferences.Match == BoardMatch.Any
+            ? sounds.Where(s => clauses.Any(clause => clause(s)))
+            : sounds.Where(s => clauses.All(clause => clause(s)));
     }
 
     /// <remarks>
