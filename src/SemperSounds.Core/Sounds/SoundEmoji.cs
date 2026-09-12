@@ -157,6 +157,15 @@ public readonly partial record struct SoundEmoji
         0x203C or 0x2049 => true,           // ‼ ⁉
         >= 0x2190 and <= 0x21FF => true,    // arrows
         >= 0x2B00 and <= 0x2BFF => true,    // additional symbols
+        // The stragglers, each a block that holds a handful of emoji among non-emoji. Left
+        // out originally, and the failure was invisible: nothing rejects a swatch the picker
+        // offers, so an unaccepted emoji is stored and then read back as the default face.
+        >= 0x2300 and <= 0x23FF => true,    // ⌚ ⌛ ⏰ ⏳ ⏩ ⏸
+        >= 0x25AA and <= 0x25FF => true,    // ▪ ◻ ◼ ◽ ●
+        0x24C2 => true,                     // Ⓜ
+        0x2934 or 0x2935 => true,           // ⤴ ⤵
+        0x3030 or 0x303D => true,           // 〰 〽
+        0x3297 or 0x3299 => true,           // ㊗ ㊙
         _ => false,
     };
 

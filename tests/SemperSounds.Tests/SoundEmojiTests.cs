@@ -65,6 +65,33 @@ public class SoundEmojiTests
         Assert.Equal("🔥", SoundEmoji.Normalize("🔥"));
     }
 
+    [Theory]
+    [InlineData("⏰")]   // 0x23F0, misc technical
+    [InlineData("⌛")]   // 0x231B
+    [InlineData("⏸️")]
+    [InlineData("Ⓜ️")]   // 0x24C2
+    [InlineData("⤴️")]   // 0x2934
+    [InlineData("〽️")]   // 0x303D
+    [InlineData("㊙️")]   // 0x3299
+    [InlineData("◼️")]   // 0x25FC
+    public void EmojiInTheStragglerBlocks_AreAccepted(string input)
+    {
+        // These sit in blocks that hold a handful of emoji among non-emoji, and each was
+        // missing from IsPictographic. Nothing rejects an unaccepted emoji loudly — it is
+        // normalised to the default face on the way out, so the only symptom is the wrong
+        // picture on a tile.
+        Assert.True(SoundEmoji.TryParse(input, out var emoji));
+        Assert.Equal(input, emoji.Raw);
+    }
+
+    [Fact]
+    public void OrdinaryTextFromThoseBlocks_IsStillRejected()
+    {
+        // Widening the ranges must not turn arbitrary symbols into valid emoji.
+        Assert.False(SoundEmoji.TryParse("hello", out _));
+        Assert.False(SoundEmoji.TryParse("123", out _));
+    }
+
     [Fact]
     public void SearchText_IncludesCustomEmojiName()
     {

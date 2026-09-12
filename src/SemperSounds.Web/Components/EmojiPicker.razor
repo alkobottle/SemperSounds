@@ -20,11 +20,25 @@
     <ChildContent>
         <div style="width: 320px; max-height: 380px; overflow-y: auto;" class="pa-3">
 
-            @if (_guildEmojis.Count > 0)
+            @* Filters both sections at once. The server emoji match on their own name, the
+               curated ones on their keywords, so one box covers the whole panel. *@
+            <MudTextField T="string"
+                          @bind-Value="_search"
+                          @bind-Value:after="StateHasChanged"
+                          Immediate="true"
+                          Placeholder="Search emoji"
+                          Adornment="Adornment.Start"
+                          AdornmentIcon="@Icons.Material.Filled.Search"
+                          Variant="Variant.Outlined"
+                          Margin="Margin.Dense"
+                          Clearable="true"
+                          Class="mb-3" />
+
+            @if (MatchingGuildEmojis is { Count: > 0 } guildMatches)
             {
-                <MudText Typo="Typo.overline">@_guildEmojis.Count server emoji</MudText>
+                <MudText Typo="Typo.overline">@guildMatches.Count server emoji</MudText>
                 <div class="d-flex flex-wrap gap-1 mb-3">
-                    @foreach (var emoji in _guildEmojis)
+                    @foreach (var emoji in guildMatches)
                     {
                         <MudTooltip Text="@($":{emoji.Name}:")">
                             <MudIconButton Size="Size.Small" OnClick="@(() => Select(emoji.Raw))">
@@ -35,22 +49,34 @@
                     }
                 </div>
             }
-            else
+            else if (_guildEmojis.Count == 0 && string.IsNullOrWhiteSpace(_search))
             {
                 <MudText Typo="Typo.caption" Class="mud-text-secondary">
                     No server emoji available — the bot may still be connecting.
                 </MudText>
             }
 
-            <MudText Typo="Typo.overline">Common</MudText>
-            <div class="d-flex flex-wrap gap-1 mb-3">
-                @foreach (var emoji in CommonEmoji)
-                {
-                    <MudIconButton Size="Size.Small" OnClick="@(() => Select(emoji))">
-                        <span style="font-size: 20px; line-height: 1;">@emoji</span>
-                    </MudIconButton>
-                }
-            </div>
+            @foreach (var category in MatchingCategories)
+            {
+                <MudText Typo="Typo.overline">@category.Name</MudText>
+                <div class="d-flex flex-wrap gap-1 mb-3">
+                    @foreach (var entry in category.Entries)
+                    {
+                        <MudTooltip Text="@entry.Keywords">
+                            <MudIconButton Size="Size.Small" OnClick="@(() => Select(entry.Emoji))">
+                                <span style="font-size: 20px; line-height: 1;">@entry.Emoji</span>
+                            </MudIconButton>
+                        </MudTooltip>
+                    }
+                </div>
+            }
+
+            @if (MatchingCategories.Count == 0 && MatchingGuildEmojis.Count == 0)
+            {
+                <MudText Typo="Typo.caption" Class="mud-text-secondary mb-3 d-block">
+                    Nothing matches that. Paste the emoji below instead.
+                </MudText>
+            }
 
             <MudTextField T="string"
                           @bind-Value="_pasted"
@@ -70,30 +96,32 @@
 </MudMenu>
 
 @code {
-    /// <summary>A small curated set. The paste field covers everything else, so shipping
-    /// a full emoji database would be weight for no real gain.</summary>
-    private static readonly string[] CommonEmoji =
-    [
-        "🔥", "😂", "💀", "📣", "🎺", "🚨", "🤡", "👏", "🎉", "💥",
-        "🙃", "😱", "🤬", "🥁", "🎵", "🔔", "😴", "🫠", "👀", "🧠",
-        "🐸", "🦆", "🐄", "🚀", "⚡", "💣", "🍆", "🥴", "😤", "🤔",
-        "❤️", "✅", "❌", "⭐", "🎯", "🏆", "🪦", "🫡", "😭", "🙏",
-    ];
-
     [Parameter, EditorRequired] public string Value { get; set; } = SoundEmoji.DefaultEmoji;
     [Parameter] public EventCallback<string> ValueChanged { get; set; }
 
     private IReadOnlyList<GuildEmoji> _guildEmojis = [];
+    private string _search = string.Empty;
     private string _pasted = string.Empty;
     private bool _pasteError;
     private bool _open;
 
     protected override void OnInitialized() => _guildEmojis = GuildEmojis.GetAll();
 
+    private IReadOnlyList<EmojiCategory> MatchingCategories => EmojiCatalog.Search(_search);
+
+    /// <remarks>A guild's list is unbounded, which is the other half of why the search box
+    /// is here: a server with hundreds of emoji buries the curated set without it.</remarks>
+    private IReadOnlyList<GuildEmoji> MatchingGuildEmojis =>
+        string.IsNullOrWhiteSpace(_search)
+            ? _guildEmojis
+            : [.. _guildEmojis.Where(e => e.Name.Contains(_search.Trim(), StringComparison.OrdinalIgnoreCase))];
+
     private async Task Select(string raw)
     {
         _pasteError = false;
         _open = false;
+        // Left as it was rather than cleared: reopening the picker to try a neighbouring
+        // emoji is the common case, and re-typing the same term to get back is a chore.
         await ValueChanged.InvokeAsync(raw);
     }
 
