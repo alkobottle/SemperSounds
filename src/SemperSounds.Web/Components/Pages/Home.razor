@@ -217,7 +217,7 @@
 
                     <MudItem xs="6" sm="4" md="3" lg="2">
                         <MudPaper Class="pa-3 d-flex flex-column" Style="height: 100%;" Elevation="2">
-                            <div class="d-flex align-center mb-1" style="gap: 10px;">
+                            <div class="d-flex align-start mb-1" style="gap: 10px;">
                                 <SoundEmojiView Value="@sound.Emoji" Size="34" />
 
                                 <div class="flex-grow-1" style="min-width: 0;">
@@ -234,10 +234,9 @@
                                                     Pixels="16" />
 
                                         @* The play count lives here rather than getting its own row or
-                                           chip: the tile's action row is already four buttons wide inside
-                                           an xs=6 column and wraps at 414px. Nothing renders at zero —
-                                           most of the library sits there and "0" is just noise. It is
-                                           also the way into the detail dialog, so that costs no button. *@
+                                           chip. Nothing renders at zero — most of the library sits there
+                                           and "0" is just noise. It is also the way into the detail dialog,
+                                           so that costs no button. *@
                                         @if (_stats.TryGetValue(sound.Id, out var stats) && stats.Plays > 0)
                                         {
                                             <span>·</span>
@@ -261,27 +260,46 @@
                                     </MudText>
                                 </div>
 
-                                @* Both live in the header rather than the button row below:
-                                   the header is the "my relationship to this sound" slot, and
-                                   that row is already four buttons wide inside an xs=6 tile. *@
-                                <MudTooltip Text="@(isEntrySound ? "Stop using as my entry sound" : "Use as my entry sound")">
-                                    <MudIconButton Icon="@Icons.Material.Filled.SensorDoor"
-                                                   Color="@(isEntrySound ? Color.Secondary : Color.Default)"
-                                                   Size="Size.Small"
-                                                   OnClick="@(() => ToggleEntrySound(sound))" />
-                                </MudTooltip>
+                                @* Stack the secondary controls so the title keeps the maximum horizontal
+                                   space. The menu sits at the tile's top-right, directly above favourite. *@
+                                <div class="d-flex flex-column align-center flex-shrink-0">
+                                    <MudTooltip Text="Sound actions">
+                                        <MudMenu Icon="@Icons.Material.Filled.MoreVert"
+                                                 AriaLabel="@($"Actions for {sound.Name}")"
+                                                 Size="Size.Small"
+                                                 Dense="true"
+                                                 AnchorOrigin="Origin.BottomRight"
+                                                 TransformOrigin="Origin.TopRight">
+                                            <MudMenuItem Icon="@Icons.Material.Filled.SensorDoor"
+                                                         IconColor="@(isEntrySound ? Color.Secondary : Color.Inherit)"
+                                                         OnClick="@(() => ToggleEntrySound(sound))">
+                                                @(isEntrySound ? "Stop using as my entry sound" : "Use as my entry sound")
+                                            </MudMenuItem>
+                                            <MudMenuItem Icon="@Icons.Material.Filled.Edit"
+                                                         OnClick="@(() => Edit(sound))">
+                                                Edit sound
+                                            </MudMenuItem>
+                                            <MudMenuItem Icon="@Icons.Material.Filled.Delete"
+                                                         IconColor="Color.Error"
+                                                         Class="mud-error-text"
+                                                         OnClick="@(() => Delete(sound))">
+                                                Delete sound
+                                            </MudMenuItem>
+                                        </MudMenu>
+                                    </MudTooltip>
 
-                                <MudTooltip Text="@(isFavorite ? "Remove from favourites" : "Add to favourites")">
-                                    <MudIconButton Icon="@(isFavorite ? Icons.Material.Filled.Star : Icons.Material.Outlined.StarBorder)"
-                                                   Color="@(isFavorite ? Color.Warning : Color.Default)"
-                                                   Size="Size.Small"
-                                                   OnClick="@(() => ToggleFavorite(sound))" />
-                                </MudTooltip>
+                                    <MudTooltip Text="@(isFavorite ? "Remove from favourites" : "Add to favourites")">
+                                        <MudIconButton Icon="@(isFavorite ? Icons.Material.Filled.Star : Icons.Material.Outlined.StarBorder)"
+                                                       Color="@(isFavorite ? Color.Warning : Color.Default)"
+                                                       Size="Size.Small"
+                                                       OnClick="@(() => ToggleFavorite(sound))" />
+                                    </MudTooltip>
+                                </div>
                             </div>
 
                             <MudSpacer />
 
-                            <div class="d-flex gap-1 mt-2">
+                            <div class="d-flex align-center gap-1 mt-2">
                                 <MudButton Variant="Variant.Filled"
                                            Color="@(isPlaying ? Color.Success : Color.Primary)"
                                            Size="Size.Small"
@@ -297,17 +315,6 @@
                                                    Size="Size.Small"
                                                    OnClick="@(() => Preview(sound))" />
                                 </MudTooltip>
-
-                                <MudTooltip Text="Edit emoji, name and tags">
-                                    <MudIconButton Icon="@Icons.Material.Filled.Edit"
-                                                   Size="Size.Small"
-                                                   OnClick="@(() => Edit(sound))" />
-                                </MudTooltip>
-
-                                <MudIconButton Icon="@Icons.Material.Filled.Delete"
-                                               Size="Size.Small"
-                                               Color="Color.Error"
-                                               OnClick="@(() => Delete(sound))" />
                             </div>
                         </MudPaper>
                     </MudItem>
