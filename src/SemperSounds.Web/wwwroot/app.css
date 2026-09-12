@@ -61,6 +61,25 @@
     font-size: 16px;
 }
 
+/* Favourite rides this row rather than taking a line of its own under the overflow menu,
+   where one glyph cost every tile a full icon-button row.
+
+   Two things have to be undone for it to fit. The auto margin goes on a plain span, not on
+   the button: MudTooltip renders its own wrapper div between the two, so the flex item this
+   row actually lays out is the wrapper, and a margin on the button never reaches it. And the
+   rule above sizes the icon to 16px, which is right beside 12px text but leaves a 16px
+   click target — under the 24px minimum — so the padding puts that back without growing
+   the glyph. */
+.ss-meta .ss-meta-end {
+    display: flex;
+    align-items: center;
+    margin-left: auto;
+}
+
+.ss-meta .ss-favourite {
+    padding: 4px;
+}
+
 html, body {
     margin: 0;
     padding: 0;

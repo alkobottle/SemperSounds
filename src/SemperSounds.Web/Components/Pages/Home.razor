@@ -271,9 +271,10 @@
                                     </MudText>
                                 </div>
 
-                                @* Stack the secondary controls so the title keeps the maximum horizontal
-                                   space. The menu sits at the tile's top-right, directly above favourite. *@
-                                <div class="d-flex flex-column align-center flex-shrink-0">
+                                @* Only the overflow menu sits up here. Favourite used to hang below it,
+                                   which cost every tile a whole icon-button row for one glyph; it rides
+                                   the metadata line now. *@
+                                <div class="d-flex align-center flex-shrink-0">
                                     <MudTooltip Text="Sound actions">
                                         <MudMenu Icon="@Icons.Material.Filled.MoreVert"
                                                  AriaLabel="@($"Actions for {sound.Name}")"
@@ -297,13 +298,6 @@
                                                 Delete sound
                                             </MudMenuItem>
                                         </MudMenu>
-                                    </MudTooltip>
-
-                                    <MudTooltip Text="@(isFavorite ? "Remove from favourites" : "Add to favourites")">
-                                        <MudIconButton Icon="@(isFavorite ? Icons.Material.Filled.Star : Icons.Material.Outlined.StarBorder)"
-                                                       Color="@(isFavorite ? Color.Warning : Color.Default)"
-                                                       Size="Size.Small"
-                                                       OnClick="@(() => ToggleFavorite(sound))" />
                                     </MudTooltip>
                                 </div>
                             </div>
@@ -349,6 +343,20 @@
                                         </span>
                                     </MudTooltip>
                                 }
+
+                                @* Pushed to the trailing edge by the wrapper's auto margin. The span is
+                                   the flex item, not the tooltip: MudTooltip renders its own wrapper div
+                                   in between, so a margin set on the button would never reach this row. *@
+                                <span class="ss-meta-end">
+                                    <MudTooltip Text="@(isFavorite ? "Remove from favourites" : "Add to favourites")">
+                                        <MudIconButton Class="ss-favourite"
+                                                       Icon="@(isFavorite ? Icons.Material.Filled.Star : Icons.Material.Outlined.StarBorder)"
+                                                       Color="@(isFavorite ? Color.Warning : Color.Default)"
+                                                       Size="Size.Small"
+                                                       aria-label="@(isFavorite ? $"Remove {sound.Name} from favourites" : $"Add {sound.Name} to favourites")"
+                                                       OnClick="@(() => ToggleFavorite(sound))" />
+                                    </MudTooltip>
+                                </span>
                             </MudText>
 
                             <MudSpacer />
