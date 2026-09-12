@@ -262,6 +262,26 @@ assembly:
   implicit conversion.
 - `ChartSeries` on the chart is `List<ChartSeries<double>>`; `ChartLabels` is `string[]`.
 
+### MudTooltip wrapping breaks a row of inline icons
+
+`MudTooltip` renders its child inside `<div class="mud-tooltip-root mud-tooltip-inline">` —
+`display: inline-block` — and drops an empty popover placeholder `div` in beside it. That
+wrapper builds a line box around the child, so a tooltipped icon on a row of caption text
+sits *above* everything next to it: measured at 3.5px on the board tile, with the row itself
+inflated from 16px to 27px. Nothing errors; the row simply looks wrong.
+
+`.ss-meta` in `app.css` fixes it for the tile by making the wrapper a flex box of its own.
+Anywhere else a tooltip sits inline with text, expect the same and do the same.
+
+Two neighbours of that bug are worth knowing:
+
+- `Size.Small` on `MudIcon` is **1.25rem**, so a "small" icon is 20px next to 12px caption
+  text and a 16px avatar. Size it explicitly when it has to sit in a text row.
+- On a flex row, `min-width: 0` is not a hint, it is a floor of zero. The uploader avatar
+  carried it and nothing else on the row did, so the whole avatar was crushed to zero width
+  and its circle spilled over the separator after it. `UserAvatar` now floors itself at the
+  circle, and `.ss-meta` pins every other child at its natural width.
+
 ### There is no Bootstrap
 
 It was removed during scaffolding, so `text-truncate`, `text-center` and friends are

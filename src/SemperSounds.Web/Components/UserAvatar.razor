@@ -8,7 +8,10 @@
     var box = $"width:{Pixels}px;height:{Pixels}px;min-width:{Pixels}px;";
 }
 
-<span class="d-inline-flex align-center" style="gap: 5px; min-width: 0;" title="@user.DisplayName">
+@* Floored at the circle rather than at zero: as a flex item beside other text this is
+   usually the only thing allowed to shrink, and "min-width: 0" let it collapse to
+   nothing and spill its circle over whatever followed. *@
+<span class="d-inline-flex align-center @Class" style="gap: 5px; min-width: @(Pixels)px; overflow: hidden;" title="@user.DisplayName">
     @if (user.AvatarUrl is { } url)
     {
         <img src="@url"
@@ -41,4 +44,7 @@
     [Parameter] public int Pixels { get; set; } = 16;
 
     [Parameter] public bool ShowName { get; set; } = true;
+
+    /// <summary>Extra classes for the root, so a caller can say how it shares a row.</summary>
+    [Parameter] public string? Class { get; set; }
 }

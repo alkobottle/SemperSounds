@@ -32,7 +32,7 @@
                 @foreach (var favorite in _favorites)
                 {
                     var sound = favorite.Sound!;
-                    <MudItem xs="6" sm="4" md="3" lg="2">
+                    <MudItem xs="6" sm="4" md="4" lg="3">
                         <MudPaper Class="pa-2" Elevation="3" Style="border-left: 3px solid var(--mud-palette-warning);">
                             <div class="d-flex align-center mb-1" style="gap: 8px;">
                                 <SoundEmojiView Value="@sound.Emoji" Size="28" />
@@ -215,48 +215,14 @@
                     var isPlaying = _playingIds.Contains(sound.Id);
                     var isEntrySound = _entrySoundId == sound.Id;
 
-                    <MudItem xs="6" sm="4" md="3" lg="2">
+                    <MudItem xs="6" sm="4" md="4" lg="3">
                         <MudPaper Class="pa-3 d-flex flex-column" Style="height: 100%;" Elevation="2">
-                            <div class="d-flex align-start mb-1" style="gap: 10px;">
+                            <div class="d-flex align-start" style="gap: 10px;">
                                 <SoundEmojiView Value="@sound.Emoji" Size="34" />
 
                                 <div class="flex-grow-1" style="min-width: 0;">
                                     <MudText Typo="Typo.subtitle2" Class="ss-clamp-2" title="@sound.Name">
                                         @sound.Name
-                                    </MudText>
-                                    <MudText Typo="Typo.caption" Class="mud-text-secondary d-flex align-center" Style="gap: 5px;">
-                                        @* The whole expression must sit inside @(...): a trailing .ToString()
-                                           after the closing paren is emitted as literal text. *@
-                                        <span>@((sound.DurationMs / 1000.0).ToString("0.0"))s</span>
-                                        <span>·</span>
-                                        <UserAvatar UserId="@sound.UploaderId"
-                                                    FallbackName="@sound.UploaderName"
-                                                    Pixels="16" />
-
-                                        @* The play count lives here rather than getting its own row or
-                                           chip. Nothing renders at zero — most of the library sits there
-                                           and "0" is just noise. It is also the way into the detail dialog,
-                                           so that costs no button. *@
-                                        @if (_stats.TryGetValue(sound.Id, out var stats) && stats.Plays > 0)
-                                        {
-                                            <span>·</span>
-                                            @* Trending swaps this icon rather than adding a badge:
-                                               one glyph, no extra control, no layout change. *@
-                                            <MudTooltip Text="@(stats.IsTrending
-                                                                  ? $"Trending — {stats.PlaysThisWeek} plays this week, up from {stats.PlaysPreviousWeek}"
-                                                                  : "Play history")">
-                                                <span class="d-inline-flex align-center"
-                                                      style="gap: 3px; cursor: pointer;"
-                                                      @onclick="@(() => ShowStats(sound))">
-                                                    <MudIcon Icon="@(stats.IsTrending
-                                                                       ? Icons.Material.Filled.LocalFireDepartment
-                                                                       : Icons.Material.Filled.PlayArrow)"
-                                                             Color="@(stats.IsTrending ? Color.Warning : Color.Inherit)"
-                                                             Size="Size.Small" />
-                                                    <span>@stats.Plays</span>
-                                                </span>
-                                            </MudTooltip>
-                                        }
                                     </MudText>
                                 </div>
 
@@ -296,6 +262,49 @@
                                     </MudTooltip>
                                 </div>
                             </div>
+
+                            @* The metadata takes the whole tile rather than the title column. Wedged in
+                               there beside a 34px emoji and a column of buttons it had 69px to render a
+                               duration, a name and a play count in, and flex resolved that shortfall by
+                               crushing the avatar to zero width and spilling it over the separator. *@
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary ss-meta mt-1">
+                                @* The whole expression must sit inside @(...): a trailing .ToString()
+                                   after the closing paren is emitted as literal text. *@
+                                <span>@((sound.DurationMs / 1000.0).ToString("0.0"))s</span>
+                                <span>·</span>
+
+                                @* The one item on the row allowed to shrink, so a long nickname
+                                   ellipsises instead of pushing the play count out of the tile. *@
+                                <UserAvatar Class="ss-uploader"
+                                            UserId="@sound.UploaderId"
+                                            FallbackName="@sound.UploaderName"
+                                            Pixels="16" />
+
+                                @* The play count lives here rather than getting its own row or
+                                   chip. Nothing renders at zero — most of the library sits there
+                                   and "0" is just noise. It is also the way into the detail dialog,
+                                   so that costs no button. *@
+                                @if (_stats.TryGetValue(sound.Id, out var stats) && stats.Plays > 0)
+                                {
+                                    <span>·</span>
+                                    @* Trending swaps this icon rather than adding a badge:
+                                       one glyph, no extra control, no layout change. *@
+                                    <MudTooltip Text="@(stats.IsTrending
+                                                          ? $"Trending — {stats.PlaysThisWeek} plays this week, up from {stats.PlaysPreviousWeek}"
+                                                          : "Play history")">
+                                        <span class="d-inline-flex align-center"
+                                              style="gap: 3px; cursor: pointer;"
+                                              @onclick="@(() => ShowStats(sound))">
+                                            <MudIcon Icon="@(stats.IsTrending
+                                                               ? Icons.Material.Filled.LocalFireDepartment
+                                                               : Icons.Material.Filled.PlayArrow)"
+                                                     Color="@(stats.IsTrending ? Color.Warning : Color.Inherit)"
+                                                     Size="Size.Small" />
+                                            <span>@stats.Plays</span>
+                                        </span>
+                                    </MudTooltip>
+                                }
+                            </MudText>
 
                             <MudSpacer />
 

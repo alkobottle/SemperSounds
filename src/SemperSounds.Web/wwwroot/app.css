@@ -22,6 +22,45 @@
     line-height: 1.25;
 }
 
+/* The tile's metadata line sets 16px avatars and icons beside 12px caption text, and three
+   MudBlazor details each break that row if left alone.
+
+   MudTooltip wraps its child in an inline-block div and drops an empty popover placeholder
+   div in beside it, so the wrapper builds a line box taller than the icon it holds and the
+   icon ends up a few pixels above everything next to it — measured at 3.5px, with the row
+   itself inflated from 16px to 27px. Size.Small icons are 20px, wider than the avatar they
+   sit against. And the avatar is the only item carrying "min-width: 0", so when the row runs
+   out of room flex crushes it to zero width and its circle overflows on top of the
+   separator that follows.
+
+   Every child is therefore pinned at its natural width except the uploader, which shrinks —
+   down to its avatar and no further, since UserAvatar floors itself at the circle. */
+.ss-meta {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    line-height: 1;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.ss-meta > * {
+    flex-shrink: 0;
+}
+
+.ss-meta .ss-uploader {
+    flex-shrink: 1;
+}
+
+.ss-meta .mud-tooltip-root {
+    display: inline-flex;
+    align-items: center;
+}
+
+.ss-meta .mud-icon-root {
+    font-size: 16px;
+}
+
 html, body {
     margin: 0;
     padding: 0;
