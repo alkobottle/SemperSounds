@@ -21,6 +21,7 @@ public sealed class SoundboardDbContext(DbContextOptions<SoundboardDbContext> op
     public DbSet<EntrySound> EntrySounds => Set<EntrySound>();
     public DbSet<EntrySoundBlock> EntrySoundBlocks => Set<EntrySoundBlock>();
     public DbSet<EntrySoundSettings> EntrySoundSettings => Set<EntrySoundSettings>();
+    public DbSet<UserPreference> UserPreferences => Set<UserPreference>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -113,6 +114,20 @@ public sealed class SoundboardDbContext(DbContextOptions<SoundboardDbContext> op
             entity.Property(e => e.BlockedAt).HasConversion(UtcTicksConverter);
 
             entity.HasIndex(e => e.UserId).IsUnique();
+        });
+
+        modelBuilder.Entity<UserPreference>(entity =>
+        {
+            entity.HasKey(p => p.Id);
+            entity.Property(p => p.UserId).HasConversion<long>();
+            entity.Property(p => p.Key).IsRequired().HasMaxLength(UserPreference.MaxKeyLength);
+            entity.Property(p => p.Value).IsRequired().HasMaxLength(UserPreference.MaxValueLength);
+            entity.Property(p => p.UpdatedAt).HasConversion(UtcTicksConverter);
+
+            // Unique in the schema, not just in the store's read-then-write: two tabs saving
+            // at once would otherwise leave the user with two rows and a coin flip over which
+            // one loads. It doubles as the index every read uses.
+            entity.HasIndex(p => new { p.UserId, p.Key }).IsUnique();
         });
 
         modelBuilder.Entity<EntrySoundSettings>(entity =>

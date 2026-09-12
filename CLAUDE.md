@@ -258,13 +258,36 @@ lowercase letter, so "Zebra" sorted above "apple".
 The favourites strip is **not** sorted or filtered. It renders from `Slot`, and `OnHotkey`
 looks up by `Slot`, so a key keeps meaning one sound — the same reason search never touched it.
 
-Preferences persist in `localStorage` under one versioned key. Snowflakes are stored **as
-strings**: a Discord id exceeds `Number.MAX_SAFE_INTEGER`, and as a JSON number any
-`JSON.parse` rounds it silently so the uploader filter matches nobody. Enums are stored by
-name so renumbering cannot repoint a saved choice. `BoardPreferencesJson.Deserialize` never
-throws — it runs in `OnAfterRenderAsync`, where an escaping exception kills the circuit.
-Reading it there rather than in `OnInitializedAsync` is forced by prerendering, which has no
-JS runtime; the cost is a brief flash of the default board.
+### Preferences live on the server, keyed by Discord id
+
+`UserPreferenceStore` (`Core/Preferences/`) holds an opaque string per user per key in
+`UserPreferences`, so a board follows the person to a second device rather than the browser.
+The value is deliberately **not** modelled as columns: `BoardPreferencesJson` already
+serialises it and already tolerates a shape written by a newer build, and mirroring that as
+columns would mean a migration per checkbox plus a second place for the two to disagree.
+Nothing queries inside a preference. The key is `(UserId, Key)` and unique **in the schema**,
+not just in the store's read-then-write, which two tabs can interleave into two rows and a
+coin flip over which one loads.
+
+`SaveAsync` returns `bool` rather than throwing. Both ways it can fail — an oversized value,
+a unique-index clash between two tabs — are reachable without anyone having written a bug,
+and a preference that does not stick leaves the screen correct while only failing to survive
+a reload. That is not worth taking a circuit down for. An oversized value is **refused, never
+truncated**: clipped JSON does not fail to load, it fails to parse, and the board answers
+that with defaults, so truncating would read back as "you never had any preferences".
+
+Because the read needs no JS runtime it happens in `OnInitializedAsync`, after `ReloadAsync`
+supplies the tag and uploader lists a stored choice is validated against. That removed the
+flash of the default board that the old `localStorage` read forced by living in
+`OnAfterRenderAsync`. What is left of that path is `AdoptBrowserPreferencesAsync`, a one-time
+carry-over that runs **only** when the server holds nothing for the user, so it can never
+overwrite a board set on another device.
+
+Snowflakes are still stored **as strings**: a Discord id exceeds `Number.MAX_SAFE_INTEGER`,
+and the value spent years in `localStorage` where `JSON.parse` rounds a large number
+silently, leaving the uploader filter matching nobody. Enums are stored by name so
+renumbering cannot repoint a saved choice, and `BoardPreferencesJson.Deserialize` never
+throws.
 
 ### MudBlazor 9 charts are generic, and Data is not an array
 

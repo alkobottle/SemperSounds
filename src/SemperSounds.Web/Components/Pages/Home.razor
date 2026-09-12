@@ -12,6 +12,7 @@
 @inject SoundboardEvents Events
 @inject ISnackbar Snackbar
 @inject IDialogService Dialogs
+@inject UserPreferenceStore Preferences
 @inject AuthenticationStateProvider AuthenticationStateProvider
 
 <PageTitle>SemperSounds</PageTitle>
@@ -457,6 +458,9 @@
     private bool _loading = true;
     private bool _canPlay;
     private ulong _userId;
+
+    /// <summary>This user's board as the server last gave or took it; null means none saved.</summary>
+    private string? _storedPreferences;
     private string _userName = string.Empty;
     private ElementReference _previewPlayer;
 
@@ -473,6 +477,12 @@
         Events.PlaybackChanged += OnPlaybackChanged;
 
         await ReloadAsync();
+
+        // After ReloadAsync, which supplies the tag and uploader lists a stored preference is
+        // validated against, and before the first render — the server read needs no JS, so
+        // unlike the old localStorage path this lands without a flash of the default board.
+        await RestorePreferencesAsync();
+
         UpdateCanPlay();
         _loading = false;
     }
@@ -780,21 +790,40 @@
             _hotkeyRef = DotNetObjectReference.Create(this);
             await JS.InvokeVoidAsync("semperSounds.registerHotkeys", _hotkeyRef);
 
-            await RestorePreferencesAsync();
+            await AdoptBrowserPreferencesAsync();
         }
     }
 
     /// <summary>
-    /// Applies the stored sort and filters, if any.
+    /// Applies this user's stored sort and filters, if any.
     /// </summary>
     /// <remarks>
-    /// Here rather than in OnInitializedAsync because rendering is prerendered: there is no
-    /// JS runtime during that pass and any interop call throws. The cost is a brief flash of
-    /// the default A–Z board before this lands, which is the accepted trade for localStorage —
-    /// only a cookie is readable early enough to avoid it.
+    /// Read from the server rather than from the browser, so the board follows the person to
+    /// a second device. That also means it runs in OnInitializedAsync: the old localStorage
+    /// read could not, because prerendering has no JS runtime, and the price was a visible
+    /// flash of the default A–Z board on every load. There is no flash now.
     /// </remarks>
     private async Task RestorePreferencesAsync()
     {
+        _storedPreferences = await Preferences.GetAsync(_userId, UserPreference.Keys.Board);
+
+        Apply(BoardPreferencesJson.Deserialize(_storedPreferences));
+    }
+
+    /// <summary>
+    /// One-time carry-over of a board saved in this browser before preferences moved server
+    /// side.
+    /// </summary>
+    /// <remarks>
+    /// Only when the server holds nothing for this user, so it cannot overwrite a board set
+    /// on another device. Without it everybody's sort and filters would silently reset the
+    /// first time they loaded the page after the deploy. Needs a JS runtime, so it is here
+    /// rather than alongside the server read.
+    /// </remarks>
+    private async Task AdoptBrowserPreferencesAsync()
+    {
+        if (_storedPreferences is not null) return;
+
         string? stored;
         try
         {
@@ -806,8 +835,16 @@
             return;
         }
 
-        var restored = BoardPreferencesJson.Deserialize(stored);
+        if (string.IsNullOrWhiteSpace(stored)) return;
 
+        Apply(BoardPreferencesJson.Deserialize(stored));
+        await SavePreferencesAsync();
+        StateHasChanged();
+    }
+
+    /// <summary>Folds a restored set of preferences into the page's own state.</summary>
+    private void Apply(BoardPreferences restored)
+    {
         // Drop choices that no longer match anything, or the viewer gets an empty grid with
         // no visible reason: the uploader may have had every sound deleted, and a tag can be
         // renamed away underneath a saved preference.
@@ -829,14 +866,14 @@
 
     private async Task SavePreferencesAsync()
     {
-        try
+        var json = BoardPreferencesJson.Serialize(_preferences);
+
+        // A refused save is deliberately silent — the board on screen is already right, it
+        // just will not survive a reload, and that is not worth a snackbar.
+        if (await Preferences.SaveAsync(_userId, UserPreference.Keys.Board, json))
         {
-            await JS.InvokeVoidAsync("semperSounds.setPreference", BoardPreferencesJson.StorageKey,
-                BoardPreferencesJson.Serialize(_preferences));
-        }
-        catch (JSException)
-        {
-            // Losing a saved preference is not worth surfacing, let alone throwing over.
+            // Tracked so the adopt-from-browser check knows this user now has a saved board.
+            _storedPreferences = json;
         }
     }
 

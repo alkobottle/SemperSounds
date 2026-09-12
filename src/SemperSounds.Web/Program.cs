@@ -10,6 +10,7 @@ using SemperSounds.Core.Audio;
 using SemperSounds.Core.Configuration;
 using SemperSounds.Core.Data;
 using SemperSounds.Core.EntrySounds;
+using SemperSounds.Core.Preferences;
 using SemperSounds.Core.Sounds;
 using SemperSounds.Core.Statistics;
 using SemperSounds.Web.Components;
@@ -64,6 +65,7 @@ builder.Services.AddScoped<ActivityLog>();
 builder.Services.AddScoped<PlayStatistics>();
 builder.Services.AddScoped<EntrySoundLibrary>();
 builder.Services.AddScoped<EntrySoundAdmin>();
+builder.Services.AddScoped<UserPreferenceStore>();
 
 // Discord side. All singletons: one gateway connection and one voice connection
 // serve every browser session.
