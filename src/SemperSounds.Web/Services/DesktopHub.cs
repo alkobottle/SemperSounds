@@ -47,6 +47,7 @@ public sealed class DesktopHub(
         // Pushed rather than waited for: the client has a tray icon to colour before it gets
         // round to asking anything.
         await Clients.Caller.StateChanged(CurrentState());
+        await Clients.Caller.NowPlayingChanged(playback.NowPlaying);
         await base.OnConnectedAsync();
     }
 
@@ -57,6 +58,8 @@ public sealed class DesktopHub(
     }
 
     public Task<BotState> GetState() => Task.FromResult(CurrentState());
+
+    public Task<IReadOnlyList<NowPlaying>> GetNowPlaying() => Task.FromResult(playback.NowPlaying);
 
     public async Task<IReadOnlyList<SoundSummary>> GetSounds()
     {

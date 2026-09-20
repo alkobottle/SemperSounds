@@ -47,6 +47,7 @@ public sealed class DesktopBroadcaster(
         events.ConnectionChanged += OnStateChanged;
         events.VoiceStateChanged += OnStateChanged;
         events.LibraryChanged += OnLibraryChanged;
+        events.PlaybackChanged += OnPlaybackChanged;
         return Task.CompletedTask;
     }
 
@@ -63,6 +64,7 @@ public sealed class DesktopBroadcaster(
         events.ConnectionChanged -= OnStateChanged;
         events.VoiceStateChanged -= OnStateChanged;
         events.LibraryChanged -= OnLibraryChanged;
+        events.PlaybackChanged -= OnPlaybackChanged;
     }
 
     /// <param name="abort">
@@ -137,6 +139,26 @@ public sealed class DesktopBroadcaster(
             }
         }, CancellationToken.None);
     }
+
+    /// <summary>
+    /// Pushes what is sounding to everyone.
+    /// </summary>
+    /// <remarks>
+    /// Broadcast rather than computed per connection, unlike bot state: what is playing in the
+    /// channel is the same fact for everybody listening to it. Raised by the pump only when the
+    /// set actually changes, so this is already as quiet as the audio is.
+    /// </remarks>
+    private void OnPlaybackChanged() => _ = Task.Run(async () =>
+    {
+        try
+        {
+            await hub.Clients.All.NowPlayingChanged(playback.NowPlaying);
+        }
+        catch (Exception ex)
+        {
+            logger.LogDebug(ex, "Could not push what is playing");
+        }
+    }, CancellationToken.None);
 
     private void OnLibraryChanged() => _ = Task.Run(async () =>
     {

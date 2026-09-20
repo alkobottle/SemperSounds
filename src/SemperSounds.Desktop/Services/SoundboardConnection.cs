@@ -36,6 +36,9 @@ public sealed class SoundboardConnection : IAsyncDisposable
 
     public IReadOnlyList<SoundSummary> Sounds { get; private set; } = [];
 
+    /// <summary>What is sounding in the channel right now, oldest first.</summary>
+    public IReadOnlyList<NowPlaying> Playing { get; private set; } = [];
+
     public event Action? Changed;
 
     /// <summary>Raised when the server says the library changed, so bindings can be reconciled.</summary>
@@ -76,6 +79,12 @@ public sealed class SoundboardConnection : IAsyncDisposable
             Changed?.Invoke();
         });
 
+        hub.On<IReadOnlyList<NowPlaying>>(nameof(ISoundboardClient.NowPlayingChanged), playing =>
+        {
+            Playing = playing;
+            Changed?.Invoke();
+        });
+
         hub.On(nameof(ISoundboardClient.LibraryChanged), () =>
         {
             LibraryChanged?.Invoke();
@@ -99,6 +108,7 @@ public sealed class SoundboardConnection : IAsyncDisposable
         hub.Closed += _ =>
         {
             Bot = BotState.Unknown;
+            Playing = [];
             Set(LinkState.Offline);
             return Task.CompletedTask;
         };
@@ -129,11 +139,39 @@ public sealed class SoundboardConnection : IAsyncDisposable
         try
         {
             Bot = await _hub.InvokeAsync<BotState>(DesktopHubMethods.GetState);
+            await RefreshNowPlayingAsync();
             await RefreshSoundsAsync();
         }
         catch (Exception)
         {
             Set(LinkState.Offline);
+        }
+    }
+
+    /// <summary>
+    /// Asks what is sounding, and shrugs if the server does not know how to answer.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately not fatal, unlike the other two. A server older than this client has no
+    /// such hub method and answers "Method does not exist" — which, treated like any other
+    /// failure, would drop the whole connection offline and leave the app useless against a
+    /// deployment that is merely a version behind. Not knowing what is playing costs one strip
+    /// of the window; not connecting costs everything.
+    /// </remarks>
+    private async Task RefreshNowPlayingAsync()
+    {
+        if (_hub is not { State: HubConnectionState.Connected } hub)
+        {
+            return;
+        }
+
+        try
+        {
+            Playing = await hub.InvokeAsync<IReadOnlyList<NowPlaying>>(DesktopHubMethods.GetNowPlaying);
+        }
+        catch (Exception)
+        {
+            Playing = [];
         }
     }
 

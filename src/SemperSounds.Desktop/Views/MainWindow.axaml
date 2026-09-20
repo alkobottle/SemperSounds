@@ -42,7 +42,7 @@
                     <!-- The same thing the hotkey does, for when you are not holding one. -->
                     <Button Click="OnPlay" Tag="{Binding}" Classes="row-icon"
                             ToolTip.Tip="Play in Discord">
-                        <TextBlock Classes="icon" Text="&#xf028;" />
+                        <TextBlock Classes="icon" Text="&#xf028;" Foreground="{Binding PlayBrush}" />
                     </Button>
                 </StackPanel>
 
@@ -69,7 +69,7 @@
         </DataTemplate>
     </Window.Resources>
 
-    <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="16">
+    <Grid RowDefinitions="Auto,Auto,Auto,*,Auto" Margin="16">
 
         <!-- Status and the bot -->
         <Border Grid.Row="0" Padding="12,10" CornerRadius="6" Background="{StaticResource DiscordSurface}">
@@ -91,8 +91,24 @@
             </Grid>
         </Border>
 
+        <!--
+            What is sounding, and who set it off. Sits directly under the status card and
+            appears only while something is playing, so a quiet channel costs no space at all.
+        -->
+        <Border Grid.Row="1" Margin="0,8,0,0" Padding="12,8" CornerRadius="6"
+                Background="{StaticResource DiscordSurface}" BorderThickness="3,0,0,0"
+                BorderBrush="{StaticResource DiscordGreen}" IsVisible="{Binding IsAnythingPlaying}">
+            <StackPanel Orientation="Horizontal" Spacing="10">
+                <TextBlock Classes="icon" Text="&#xf028;" Foreground="{StaticResource DiscordGreen}"
+                           VerticalAlignment="Center" />
+                <TextBlock Text="{Binding NowPlayingText}" VerticalAlignment="Center"
+                           Foreground="{StaticResource DiscordHeaderText}"
+                           TextTrimming="CharacterEllipsis" />
+            </StackPanel>
+        </Border>
+
         <!-- Elevation warning: only when the hook is actually blind to the window in front -->
-        <Border Grid.Row="1" Margin="0,8,0,0" Padding="12,10" CornerRadius="6"
+        <Border Grid.Row="2" Margin="0,8,0,0" Padding="12,10" CornerRadius="6"
                 Background="{StaticResource DiscordSurface}" BorderThickness="0,0,0,2"
                 BorderBrush="{StaticResource DiscordYellow}" IsVisible="{Binding NeedsElevation}">
             <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
@@ -107,7 +123,7 @@
         </Border>
 
         <!-- Sounds: what is bound, then everything else -->
-        <Grid Grid.Row="2" RowDefinitions="Auto,Auto,*" Margin="0,12,0,0">
+        <Grid Grid.Row="3" RowDefinitions="Auto,Auto,*" Margin="0,12,0,0">
 
             <!--
                 The bindings, in their own list. A board of two hundred clips has a handful of
@@ -134,7 +150,7 @@
             Open until the device is paired. Pairing lives in here, so a collapsed panel on
             first run leaves somebody with an empty window and no visible way forward.
         -->
-        <Expander Grid.Row="3" Header="Settings" Margin="0,12,0,0" Background="{StaticResource DiscordSurface}"
+        <Expander Grid.Row="4" Header="Settings" Margin="0,12,0,0" Background="{StaticResource DiscordSurface}"
                   IsExpanded="{Binding !IsPaired, Mode=OneTime}">
             <StackPanel Spacing="8" Margin="0,8,0,0">
 

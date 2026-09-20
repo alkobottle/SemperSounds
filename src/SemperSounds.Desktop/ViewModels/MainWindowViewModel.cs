@@ -38,6 +38,7 @@ public sealed class SoundRow(SoundSummary sound) : Observable
     private HotkeyChord _chord = HotkeyChord.None;
     private Bitmap? _emojiImage;
     private bool _isPreviewing;
+    private bool _isPlayingInDiscord;
 
     public Guid Id { get; } = sound.Id;
 
@@ -106,6 +107,22 @@ public sealed class SoundRow(SoundSummary sound) : Observable
     public IBrush ChordBrush => _chord.IsValid ? DiscordPalette.Blurple : DiscordPalette.Muted;
 
     public bool HasChord => _chord.IsValid;
+
+    /// <summary>True while this clip is sounding in the voice channel.</summary>
+    public bool IsPlayingInDiscord
+    {
+        get => _isPlayingInDiscord;
+        set
+        {
+            if (Set(ref _isPlayingInDiscord, value))
+            {
+                Raise(nameof(PlayBrush));
+            }
+        }
+    }
+
+    /// <summary>Green while it is sounding, so a glance at the row says so.</summary>
+    public IBrush PlayBrush => _isPlayingInDiscord ? DiscordPalette.Green : DiscordPalette.Muted;
 
     /// <summary>True while this clip is the one previewing locally.</summary>
     public bool IsPreviewing
@@ -194,6 +211,11 @@ public sealed class MainWindowViewModel : Observable, IDisposable
     public ObservableCollection<SoundRow> Unassigned { get; } = [];
 
     public bool HasAssigned => Assigned.Count > 0;
+
+    /// <summary>What is sounding right now, as one line. Empty when the channel is quiet.</summary>
+    public string NowPlayingText => NowPlayingSummary.Describe(_connection.Playing);
+
+    public bool IsAnythingPlaying => _connection.Playing.Count > 0;
 
     public event Action? ExitRequested;
 
@@ -439,6 +461,17 @@ public sealed class MainWindowViewModel : Observable, IDisposable
         }
     }
 
+    /// <summary>Marks the rows whose clips are sounding in the channel.</summary>
+    private void RefreshPlayingState()
+    {
+        var playing = _connection.Playing.Select(p => p.SoundId).ToHashSet();
+
+        foreach (var row in Rows)
+        {
+            row.IsPlayingInDiscord = playing.Contains(row.Id);
+        }
+    }
+
     public void Show() => ShowWindowRequested?.Invoke();
 
     public void Exit() => ExitRequested?.Invoke();
@@ -474,10 +507,13 @@ public sealed class MainWindowViewModel : Observable, IDisposable
     {
         StatusText = Describe();
 
-        // Raised by hand: the dot is computed from connection state rather than from
-        // StatusText, so nothing else would tell the binding it had changed.
+        // Raised by hand: these are computed from connection state rather than from
+        // StatusText, so nothing else would tell the bindings they had changed.
         Raise(nameof(StatusBrush));
         Raise(nameof(NeedsElevation));
+        Raise(nameof(NowPlayingText));
+        Raise(nameof(IsAnythingPlaying));
+        RefreshPlayingState();
 
         if (_connection.Sounds.Count != 0 && Rows.Count == 0)
         {
@@ -547,6 +583,8 @@ public sealed class MainWindowViewModel : Observable, IDisposable
             Rows.Add(row);
             _ = row.LoadEmojiAsync(_emoji);
         }
+
+        RefreshPlayingState();
 
         ApplyFilter();
         Rebind();

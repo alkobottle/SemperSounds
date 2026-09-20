@@ -11,6 +11,15 @@ public interface ISoundboardClient
 
     /// <summary>A sound was uploaded or deleted — re-read the library, bindings may be stale.</summary>
     Task LibraryChanged();
+
+    /// <summary>
+    /// What is sounding in the channel right now, oldest first. Empty when the channel is quiet.
+    /// </summary>
+    /// <remarks>
+    /// Pushed rather than polled: clips are short, so anything asking on a timer would be
+    /// mostly wrong and mostly idle at the same time.
+    /// </remarks>
+    Task NowPlayingChanged(IReadOnlyList<NowPlaying> playing);
 }
 
 /// <summary>
@@ -33,4 +42,5 @@ public static class DesktopHubMethods
     public const string StopAll = nameof(StopAll);
     public const string GetSounds = nameof(GetSounds);
     public const string GetState = nameof(GetState);
+    public const string GetNowPlaying = nameof(GetNowPlaying);
 }

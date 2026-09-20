@@ -45,6 +45,21 @@ public sealed class PlaybackService(
     private readonly ConcurrentDictionary<ulong, DateTimeOffset> _lastPlayed = new();
 
     /// <summary>
+    /// Who set off each clip that is currently sounding.
+    /// </summary>
+    /// <remarks>
+    /// The mixer knows what is playing and nothing else; attribution has to be remembered at
+    /// the moment a play is accepted. Entries are dropped by the pump as clips fall out of the
+    /// mixer, so this and <see cref="PlayingSoundIds"/> always describe the same instant.
+    /// </remarks>
+    private readonly ConcurrentDictionary<Guid, NowPlaying> _nowPlaying = new();
+
+    /// <summary>Insertion order, so the list reads oldest first rather than by hash.</summary>
+    private readonly ConcurrentDictionary<Guid, long> _startedAt = new();
+
+    private long _playSequence;
+
+    /// <summary>
     /// A floor on how fast one person can drag the bot between channels. Playing has always
     /// had a cooldown; joining never did, because clicking a button was its own limit. A bound
     /// key is not, and every hop is a voice reconnect — enough of them and Discord rate-limits
@@ -71,6 +86,10 @@ public sealed class PlaybackService(
 
     /// <summary>Sound IDs currently sounding, so the UI can show them as playing.</summary>
     public IReadOnlySet<Guid> PlayingSoundIds => _playing;
+
+    /// <summary>What is sounding right now and who started it, oldest first.</summary>
+    public IReadOnlyList<NowPlaying> NowPlaying =>
+        [.. _nowPlaying.Values.OrderBy(p => _startedAt.GetValueOrDefault(p.SoundId))];
 
     /// <summary>The channel the bot is currently connected to, if any.</summary>
     public ulong? ConnectedChannelId { get; private set; }
@@ -243,6 +262,7 @@ public sealed class PlaybackService(
         }
 
         _mixer.Add(pcm, sound.Id);
+        RememberPlaying(sound.Id, sound.Name, userName, isEntrySound: false);
         _lastPlayed[userId] = DateTimeOffset.UtcNow;
 
         // Guarded like the other log writes: the clip is already mixing by this point, so a
@@ -316,6 +336,7 @@ public sealed class PlaybackService(
         }
 
         _mixer.Add(pcm, sound.Id, gain);
+        RememberPlaying(sound.Id, sound.Name, userName, isEntrySound: true);
 
         var channelName = ConnectedChannelName;
         await LogActivityAsync(log => log.LogEntrySoundAsync(sound, userId, userName, channelId, channelName));
@@ -333,6 +354,8 @@ public sealed class PlaybackService(
     public void StopAll()
     {
         _mixer.StopAll();
+        _nowPlaying.Clear();
+        _startedAt.Clear();
 
         // Publish straight away rather than waiting for the next pump frame, so the tiles
         // stop looking like they are playing the instant the button is pressed.
@@ -441,6 +464,18 @@ public sealed class PlaybackService(
         if (!active.SetEquals(_playing))
         {
             _playing = active;
+
+            // Attribution is forgotten as the audio drops out, so the two never disagree about
+            // what is sounding.
+            foreach (var soundId in _nowPlaying.Keys)
+            {
+                if (!active.Contains(soundId))
+                {
+                    _nowPlaying.TryRemove(soundId, out _);
+                    _startedAt.TryRemove(soundId, out _);
+                }
+            }
+
             events.RaisePlaybackChanged();
         }
 
@@ -448,6 +483,12 @@ public sealed class PlaybackService(
         {
             await SetSpeakingAsync(speaking, cancellationToken);
         }
+    }
+
+    private void RememberPlaying(Guid soundId, string soundName, string userName, bool isEntrySound)
+    {
+        _nowPlaying[soundId] = new NowPlaying(soundId, soundName, userName, isEntrySound);
+        _startedAt[soundId] = Interlocked.Increment(ref _playSequence);
     }
 
     private async Task SetSpeakingAsync(bool speaking, CancellationToken cancellationToken)
@@ -568,6 +609,8 @@ public sealed class PlaybackService(
         _pumpTask = null;
 
         _mixer.StopAll();
+        _nowPlaying.Clear();
+        _startedAt.Clear();
         _playing = new HashSet<Guid>();
         _speakingGate.Reset(speaking: false);
 
