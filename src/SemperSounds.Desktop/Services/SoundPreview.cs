@@ -26,7 +26,7 @@ public sealed class SoundPreview(HttpClient http, Func<string?> tokenProvider) :
     private readonly Lock _gate = new();
 
     private WaveOut? _output;
-    private Mp3FileReader? _reader;
+    private Mp3FileReaderBase? _reader;
     private MemoryStream? _buffer;
 
     /// <summary>The clip currently being previewed, if any.</summary>
@@ -77,7 +77,11 @@ public sealed class SoundPreview(HttpClient http, Func<string?> tokenProvider) :
                 StopCore();
 
                 _buffer = new MemoryStream(mp3);
-                _reader = new Mp3FileReader(_buffer);
+                // Mp3FileReaderBase plus the ACM decompressor explicitly, which is what the
+                // convenience Mp3FileReader does internally. Naming them keeps the dependency
+                // at NAudio.Core plus NAudio.WinMM instead of the metapackage, which would
+                // bring the whole Windows Forms runtime along for a tray app that draws none.
+                _reader = new Mp3FileReaderBase(_buffer, format => new AcmMp3FrameDecompressor(format));
                 _output = new WaveOut();
                 _output.Init(_reader);
                 _output.PlaybackStopped += OnPlaybackStopped;

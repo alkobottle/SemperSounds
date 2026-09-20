@@ -187,14 +187,14 @@ app.MapGet("/healthz", (IOptions<AppOptions> app) => Results.Ok(new
 // signed-in guild member approved the pairing in their browser a moment ago, plus the verifier
 // proving this is the same app that started the flow.
 app.MapPost("/api/device/token", async (
-    DeviceTokenExchangeRequest request, DeviceCodeStore codes, DeviceTokenStore tokens, CancellationToken cancellationToken) =>
+    DeviceTokenRequest request, DeviceCodeStore codes, DeviceTokenStore tokens, CancellationToken cancellationToken) =>
 {
     var pending = codes.Redeem(request.Code, request.Verifier, request.RedirectUri);
     if (pending is null)
     {
         // One answer for unknown, expired, already-used and wrong-verifier alike: telling a
         // caller which of those it hit is telling it how to search.
-        return Results.Json(new { error = "That pairing code is not valid any more. Start again from the app." },
+        return Results.Json(new DeviceTokenError("That pairing code is not valid any more. Start again from the app."),
             statusCode: StatusCodes.Status400BadRequest);
     }
 
@@ -203,12 +203,12 @@ app.MapPost("/api/device/token", async (
         var token = await tokens.IssueAsync(pending.UserId, pending.UserName, pending.DeviceName, cancellationToken);
 
         // The only time the plaintext exists. Everything after this works from its hash.
-        return Results.Json(new DeviceTokenExchangeResponse(token, pending.UserId.ToString(), pending.UserName));
+        return Results.Json(new DeviceTokenResponse(token, pending.UserId.ToString(), pending.UserName));
     }
     catch (InvalidOperationException ex)
     {
         // Thrown when the user is at their device cap, which is a refusal rather than a fault.
-        return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status409Conflict);
+        return Results.Json(new DeviceTokenError(ex.Message), statusCode: StatusCodes.Status409Conflict);
     }
 });
 
@@ -252,12 +252,3 @@ app.MapGet("/sounds/{id:guid}/preview", async (
 });
 
 app.Run();
-
-/// <param name="Verifier">
-/// The secret half of the challenge published when the flow started. Any local process can
-/// watch the loopback port and race for the code; only the app that began pairing has this.
-/// </param>
-internal sealed record DeviceTokenExchangeRequest(string Code, string Verifier, string RedirectUri);
-
-/// <param name="UserId">A string: a Discord snowflake exceeds what a JSON number holds exactly.</param>
-internal sealed record DeviceTokenExchangeResponse(string Token, string UserId, string UserName);

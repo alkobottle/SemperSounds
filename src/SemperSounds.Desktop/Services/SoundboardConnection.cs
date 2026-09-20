@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.SignalR.Client;
+using Microsoft.Extensions.DependencyInjection;
 using SemperSounds.Contracts;
 using SemperSounds.Desktop.Core;
 
@@ -58,6 +59,13 @@ public sealed class SoundboardConnection : IAsyncDisposable
                 // Read per request rather than captured, so re-pairing takes effect without
                 // rebuilding the connection.
                 options.AccessTokenProvider = () => Task.FromResult(_tokenProvider());
+            })
+            .AddJsonProtocol(options =>
+            {
+                // Inserted ahead of the default resolver. Trimming disables reflection-based
+                // serialization, so without this every hub call fails the moment it tries to
+                // read its own arguments back.
+                options.PayloadSerializerOptions.TypeInfoResolverChain.Insert(0, SoundboardJsonContext.Default);
             })
             .WithAutomaticReconnect()
             .Build();

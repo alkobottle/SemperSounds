@@ -4,6 +4,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text;
+using SemperSounds.Contracts;
 using SemperSounds.Desktop.Core;
 
 namespace SemperSounds.Desktop.Services;
@@ -119,19 +120,24 @@ public sealed class PairingFlow(HttpClient http)
 
         try
         {
+            // A named record rather than an anonymous type: anonymous types cannot be given
+            // build-time serialization metadata, and trimming leaves no reflection fallback.
             var response = await http.PostAsJsonAsync(
                 new Uri(server, "/api/device/token"),
-                new { code, verifier, redirectUri },
+                new DeviceTokenRequest(code, verifier, redirectUri),
+                SoundboardJsonContext.Default.DeviceTokenRequest,
                 cancellationToken);
 
             if (!response.IsSuccessStatusCode)
             {
-                var problem = await response.Content.ReadFromJsonAsync<ErrorResponse>(cancellationToken);
+                var problem = await response.Content.ReadFromJsonAsync(
+                    SoundboardJsonContext.Default.DeviceTokenError, cancellationToken);
                 await RespondAsync(context, "Pairing failed. You can close this tab.");
                 return PairingResult.Fail(problem?.Error ?? $"The server refused the pairing ({(int)response.StatusCode}).");
             }
 
-            var issued = await response.Content.ReadFromJsonAsync<TokenResponse>(cancellationToken);
+            var issued = await response.Content.ReadFromJsonAsync(
+                SoundboardJsonContext.Default.DeviceTokenResponse, cancellationToken);
             if (issued is null)
             {
                 await RespondAsync(context, "Pairing failed. You can close this tab.");
@@ -176,7 +182,4 @@ public sealed class PairingFlow(HttpClient http)
         context.Response.Close();
     }
 
-    private sealed record TokenResponse(string Token, string UserId, string UserName);
-
-    private sealed record ErrorResponse(string Error);
 }

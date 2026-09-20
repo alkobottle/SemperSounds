@@ -15,12 +15,29 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 
     <!--
-      Never trim. The SignalR client serialises hub arguments through reflection-based
-      System.Text.Json, which trimming removes without any build-time complaint - the app
-      publishes, starts, and then fails on the first hub call. If size ever matters, a
-      JsonSerializerContext comes first.
+      Trimmed, which takes the download from 246 MB to about 25 MB.
+
+      This is only safe because every shape that gets serialised now has build-time metadata:
+      SoundboardJsonContext for the hub, PairingJsonContext for pairing, DesktopConfigJsonContext
+      for the settings file. Trimming disables reflection-based serialization outright, and the
+      failure is an exception on the very first use - adding a serialised type without adding it
+      to a context will break the app at startup or on the first key press.
+
+      Partial mode on purpose: SukiUI and Avalonia's DataGrid are not marked trimmable and are
+      left whole, which is what keeps their reflection working.
     -->
-    <PublishTrimmed>false</PublishTrimmed>
+    <PublishTrimmed>true</PublishTrimmed>
+    <TrimMode>partial</TrimMode>
+
+    <!--
+      Squeezes the bundled framework and native libraries. It costs a moment on first launch,
+      when the runtime extracts them to a cache folder, and nothing on launches after that.
+    -->
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+
+    <!-- Symbols inside the assembly rather than beside it: stack traces keep their line
+         numbers without three loose .pdb files travelling with a single-file app. -->
+    <DebugType>embedded</DebugType>
   </PropertyGroup>
 
   <ItemGroup>
@@ -34,8 +51,13 @@
     <PackageReference Include="Avalonia.Fonts.Inter" Version="12.1.2" />
     <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="10.0.10" />
 
-    <!-- Local preview playback. Avalonia draws; it has no audio of its own. -->
-    <PackageReference Include="NAudio" Version="3.1.0" />
+    <!--
+      Local preview playback: Avalonia draws and has no audio of its own. WinMM specifically,
+      not the NAudio metapackage - that one also pulls NAudio.WinForms, which drags the entire
+      Windows Forms runtime pack into a single-file build for an app that draws no WinForms.
+      WinMM alone carries WaveOut and Mp3FileReader, which is all this needs.
+    -->
+    <PackageReference Include="NAudio.WinMM" Version="3.1.0" />
 
     <PackageReference Include="SukiUI" Version="7.0.1" />
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.10" />
@@ -44,5 +66,17 @@
   <ItemGroup>
     <AvaloniaResource Include="Assets\**" />
   </ItemGroup>
+
+  <!--
+    Skia and HarfBuzz ship their native .pdb files as package content, and they are 104 MB
+    between them - two thirds of what anybody would download, for symbols belonging to
+    libraries this project does not debug.
+  -->
+  <Target Name="DropNativeSymbols" AfterTargets="Publish">
+    <ItemGroup>
+      <NativeSymbols Include="$(PublishDir)*.pdb" />
+    </ItemGroup>
+    <Delete Files="@(NativeSymbols)" />
+  </Target>
 
 </Project>

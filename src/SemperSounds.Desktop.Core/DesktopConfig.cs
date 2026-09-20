@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 
 namespace SemperSounds.Desktop.Core;
 
@@ -86,10 +87,8 @@ public sealed class DesktopConfig
 
     public bool StartMinimised { get; set; } = true;
 
-    public static JsonSerializerOptions SerializerOptions { get; } = new()
+    public static JsonSerializerOptions SerializerOptions { get; } = new(DesktopConfigJsonContext.Default.Options)
     {
-        WriteIndented = true,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
 
         // The default encoder rewrites '+' into a unicode escape, so a chord would reach disk
         // with the separator spelled out as an escape sequence rather than a plus sign. That
@@ -97,6 +96,14 @@ public sealed class DesktopConfig
         // encoder is safe here: it is a local file, never embedded in HTML or a script.
         Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
     };
+
+    /// <summary>
+    /// Bound to <see cref="SerializerOptions"/> rather than taken straight off the context,
+    /// so the relaxed encoder above still applies. The context supplies the metadata, which is
+    /// what survives trimming; the options supply the formatting.
+    /// </summary>
+    private static readonly JsonTypeInfo<DesktopConfig> TypeInfo =
+        (JsonTypeInfo<DesktopConfig>)SerializerOptions.GetTypeInfo(typeof(DesktopConfig));
 
     /// <summary>
     /// Reads a config, falling back to defaults for anything unreadable.
@@ -115,7 +122,7 @@ public sealed class DesktopConfig
 
         try
         {
-            return JsonSerializer.Deserialize<DesktopConfig>(json, SerializerOptions) ?? new DesktopConfig();
+            return JsonSerializer.Deserialize(json, TypeInfo) ?? new DesktopConfig();
         }
         catch (JsonException)
         {
@@ -123,5 +130,17 @@ public sealed class DesktopConfig
         }
     }
 
-    public string Serialize() => JsonSerializer.Serialize(this, SerializerOptions);
+    public string Serialize() => JsonSerializer.Serialize(this, TypeInfo);
 }
+
+/// <summary>
+/// Build-time serialization metadata for <see cref="DesktopConfig"/>.
+/// </summary>
+/// <remarks>
+/// Required because the desktop app publishes trimmed, which disables reflection-based
+/// serialization entirely - without this the app throws on startup, at the first attempt to
+/// read its own settings file.
+/// </remarks>
+[JsonSourceGenerationOptions(WriteIndented = true, PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
+[JsonSerializable(typeof(DesktopConfig))]
+internal sealed partial class DesktopConfigJsonContext : JsonSerializerContext;
