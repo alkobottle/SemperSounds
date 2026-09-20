@@ -14,9 +14,14 @@ It also does the two things Discord charges for or does not do at all: a persona
 sound** when you walk into voice, and **play counts** you can sort and filter the whole
 board by.
 
+There is a **[Windows app](#windows-app)** as well, so you can fire clips with a hotkey
+without alt-tabbing out of a game.
+
 - **Backend:** .NET 10 + [NetCord](https://netcord.dev) (gateway and voice)
 - **UI:** Blazor Web App (InteractiveServer) + [MudBlazor](https://mudblazor.com)
 - **Storage:** SQLite + files on a mounted volume
+- **Desktop:** Avalonia + [SukiUI](https://github.com/kikipoulet/SukiUI), talking to the
+  server over SignalR
 - **Audio:** ffmpeg at upload time only
 
 ## How it works
@@ -84,6 +89,54 @@ the last seven days than the seven before, with at least five plays this week. T
 rise rather than a rank, so a perennial favourite at a steady rate does not wear one
 forever. Clicking the count opens its history: total plays, first and last, and who plays
 it most.
+
+## Windows app
+
+[**Download SemperSounds.Desktop.exe**](https://github.com/alkobottle/SemperSounds/releases/latest)
+— one file, about 25 MB, no runtime to install. It keeps its settings in
+`%APPDATA%\SemperSounds` and runs from wherever you put it.
+
+It is a **remote control, not a second soundboard**. Pressing a key asks the server to play
+the clip through the same bot, so the same rules apply: you have to be in the bot's channel,
+the same cooldown paces you, and the press lands in the log and the play counts exactly as
+a click on the board does.
+
+| Thing | Behaviour |
+|---|---|
+| Pairing | Opens your browser, you approve it, and the app gets a device token. Manage or revoke them at `/devices` |
+| Hotkeys | Any key or combination. `F13`–`F24` on a macro keyboard are the safest, since no game uses them |
+| Pass-through | A bound key **still does its normal job** — bind `F1` and F1 still opens your game's help |
+| Auto-summon | If the bot is elsewhere when you press, the app summons it to you and plays. Switch it off if you would rather it did not |
+| Extra keys | Stop everything, summon/dismiss the bot, and mute the app so you can type in a game chat. All unbound by default |
+| Preview | Headphones plays a clip **to you only**, so auditioning the library does not fire it at everybody |
+| Now playing | Shows what is sounding and who set it off, entry sounds included |
+| Tray | Closing the window hides it; quitting is the tray menu. Optionally starts with Windows |
+
+### Why hotkeys sometimes do nothing
+
+The app watches the keyboard with a low-level hook rather than registering hotkeys, which
+is what lets a bound key keep working everywhere else. Two consequences:
+
+- **Games running as administrator.** Windows will not let a normal program see keys going
+  to an elevated window, which is most games with kernel anti-cheat. The app notices and
+  offers to restart itself elevated.
+- **Anti-cheat.** A global keyboard hook is a pattern some anti-cheat software dislikes.
+  Nothing can be done about that from this side.
+
+The on-screen popup also cannot draw over a game in **exclusive** fullscreen — nothing can.
+That is why there is a sound cue as well, which always works. Both are off until you turn
+them on.
+
+### Building it yourself
+
+```bash
+pwsh tools/publish-desktop.ps1        # -> dist/desktop/SemperSounds.Desktop.exe
+```
+
+Published self-contained, single-file and trimmed. Trimming disables reflection-based JSON,
+so everything that crosses the wire has a source-generated serializer context — adding a
+serialised type without adding it to one breaks the app on first use of that path, not at
+build time.
 
 ## Discord setup
 
@@ -247,9 +300,12 @@ mean pressing a button silenced your own entry sound.
 src/SemperSounds.Core/     Domain: PcmMixer, upload validation, ffmpeg wrappers, EF model
                            EntrySounds/  who has which entry sound, and the rules for playing it
                            Statistics/   play counts and rankings, aggregated from the log
-src/SemperSounds.Web/      Blazor UI, Discord gateway + voice, auth
+src/SemperSounds.Web/      Blazor UI, Discord gateway + voice, auth, the desktop hub
+src/SemperSounds.Contracts/    Wire types shared by the server and the Windows app
+src/SemperSounds.Desktop.Core/ The app's decisions: hotkey chords, config, retrigger rules
+src/SemperSounds.Desktop/      Avalonia window, tray icon, keyboard hook, Win32 interop
 tools/SemperSounds.Import/ Bulk importer, published into the same image
-tests/SemperSounds.Tests/  Unit tests
+tests/SemperSounds.Tests/  Unit tests, including the desktop app's logic
 ```
 
 | Page | What it is |
@@ -261,9 +317,15 @@ tests/SemperSounds.Tests/  Unit tests
 | `/admin/entry-sounds` | Entry sound controls, Discord administrators only |
 | `/log` | Everything that happened, newest first |
 | `/stats` | Play counts, rankings and a plays-per-day chart |
+| `/devices` | Windows apps paired to your account, and a button to revoke them |
 
 Everything except `/` requires sign-in, which requires being in the server.
 
 The mixer, upload validator, entry sound rules, board sorting and play statistics all live
 outside the pages specifically so they can be tested without a Discord connection or a
 browser — there is no bUnit here, so anything left inside a `.razor` file is untestable.
+
+`SemperSounds.Desktop.Core` exists for the same reason and one more: it targets plain
+`net10.0` rather than `net10.0-windows`, which is what lets the one existing test project
+reference it. Everything the app *decides* lives there; everything it *draws or calls
+Win32 for* lives in `SemperSounds.Desktop`, which has no tests.

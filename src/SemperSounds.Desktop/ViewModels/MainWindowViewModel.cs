@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
@@ -222,6 +223,26 @@ public sealed class MainWindowViewModel : Observable, IDisposable
     public event Action? ShowWindowRequested;
 
     public bool IsPaired => _token is not null;
+
+    /// <summary>
+    /// The version, for the corner of the settings panel.
+    /// </summary>
+    /// <remarks>
+    /// Read from the assembly rather than written out again here, so there is one place that
+    /// says what version this is. The informational version carries a +commit suffix when the
+    /// build has one, which is noise on screen.
+    /// </remarks>
+    public string AppVersion
+    {
+        get
+        {
+            var version = typeof(MainWindowViewModel).Assembly
+                .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "dev";
+
+            var suffix = version.IndexOf('+');
+            return "v" + (suffix < 0 ? version : version[..suffix]);
+        }
+    }
 
     public bool IsMuted => _router.IsMuted;
 

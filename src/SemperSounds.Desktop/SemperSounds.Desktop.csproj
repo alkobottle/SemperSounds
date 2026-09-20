@@ -6,6 +6,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <!-- Shown in the app, in the exe's file properties, and used for the release tag. -->
+    <Version>1.0.0</Version>
+
     <ApplicationManifest>app.manifest</ApplicationManifest>
 
     <!-- What Explorer and the taskbar show for the .exe itself. -->

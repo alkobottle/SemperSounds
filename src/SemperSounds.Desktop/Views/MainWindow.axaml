@@ -174,8 +174,13 @@
                     <CheckBox Content="Start in the tray" IsChecked="{Binding StartMinimised}" />
                 </WrapPanel>
 
-                <TextBlock Text="The popup cannot draw over a game in exclusive fullscreen; the sound always works."
-                           FontSize="11" Foreground="{StaticResource DiscordMutedText}" TextWrapping="Wrap" />
+                <Grid ColumnDefinitions="*,Auto">
+                    <TextBlock Text="The popup cannot draw over a game in exclusive fullscreen; the sound always works."
+                               FontSize="11" Foreground="{StaticResource DiscordMutedText}" TextWrapping="Wrap" />
+                    <TextBlock Grid.Column="1" Text="{Binding AppVersion}" FontSize="11"
+                               Foreground="{StaticResource DiscordMutedText}" VerticalAlignment="Bottom"
+                               Margin="12,0,0,0" />
+                </Grid>
             </StackPanel>
         </Expander>
     </Grid>
