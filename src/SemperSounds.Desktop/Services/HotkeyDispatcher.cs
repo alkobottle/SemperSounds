@@ -132,8 +132,14 @@ public sealed class HotkeyDispatcher(
             return;
         }
 
-        // Reported even for a cooldown. A press that does nothing and says nothing is
-        // indistinguishable from the hook having died, and that is a real failure mode here.
+        // A clip that is still playing says so itself, audibly, in the channel. Announcing it
+        // as well would put a cue or a popup on every press of a held key, which is the noise
+        // the refusal exists to prevent.
+        if (!AutoSummonPolicy.ShouldReport(result.Failure))
+        {
+            return;
+        }
+
         var title = result.Failure == PlayFailure.Missing
             ? $"\"{action.SoundName}\" is no longer on the board"
             : action.SoundName;

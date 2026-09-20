@@ -254,6 +254,16 @@ public sealed partial class LowLevelKeyboardHook : IDisposable
 
             if (capture is not null)
             {
+                // Assigning Ctrl+F1 means pressing Ctrl first. Consuming that would hand back
+                // a chord whose key is a modifier - invalid, discarded by the caller, and the
+                // attempt is over before the user has finished making it. So capture waits for
+                // a key that can actually carry a binding, and the modifiers ride along in the
+                // state tracked above.
+                if (HotkeyChord.IsModifier(key))
+                {
+                    return;
+                }
+
                 _capture = null;
             }
             else if (!_watched.Contains(new HotkeyChord(key, modifiers)))

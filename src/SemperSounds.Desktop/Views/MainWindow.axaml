@@ -5,70 +5,149 @@
         x:DataType="vm:MainWindowViewModel"
         Title="SemperSounds" Width="680" Height="620" MinWidth="520" MinHeight="420"
         WindowStartupLocation="CenterScreen"
-        Icon="avares://SemperSounds.Desktop/Assets/tray.ico">
+        Background="{StaticResource DiscordBase}"
+        Foreground="{StaticResource DiscordText}"
+        Icon="avares://SemperSounds.Desktop/Assets/app.ico">
+
+    <Window.Resources>
+        <!-- One template, two lists. They differ only in what they are fed. -->
+        <DataTemplate x:Key="SoundRowTemplate" x:DataType="vm:SoundRow">
+            <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" Height="30" ColumnSpacing="4">
+                <Panel Grid.Column="0" Width="26" VerticalAlignment="Center">
+                    <!--
+                        A standard emoji is a character the font draws; a custom one is a
+                        picture on Discord's CDN, and showing its :name: form instead is what
+                        made a library of custom emoji unreadable here.
+                    -->
+                    <TextBlock Text="{Binding Emoji}" FontSize="15" VerticalAlignment="Center"
+                               TextTrimming="CharacterEllipsis" IsVisible="{Binding ShowEmojiText}" />
+                    <Image Source="{Binding EmojiImage}" Width="18" Height="18"
+                           HorizontalAlignment="Left" VerticalAlignment="Center"
+                           IsVisible="{Binding HasEmojiImage}" />
+                </Panel>
+
+                <TextBlock Grid.Column="1" Text="{Binding Name}" VerticalAlignment="Center"
+                           Foreground="{StaticResource DiscordText}" TextTrimming="CharacterEllipsis" />
+                <TextBlock Grid.Column="2" Text="{Binding Duration}" FontSize="11"
+                           Foreground="{StaticResource DiscordMutedText}"
+                           VerticalAlignment="Center" Margin="8,0" />
+
+                <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
+                    <!-- Local audition. Doubles as its own stop, hence the swapping icon. -->
+                    <Button Click="OnPreview" Tag="{Binding}" Classes="row-icon"
+                            ToolTip.Tip="Preview on this PC">
+                        <TextBlock Classes="icon" Text="{Binding PreviewIcon}" />
+                    </Button>
+
+                    <!-- The same thing the hotkey does, for when you are not holding one. -->
+                    <Button Click="OnPlay" Tag="{Binding}" Classes="row-icon"
+                            ToolTip.Tip="Play in Discord">
+                        <TextBlock Classes="icon" Text="&#xf028;" />
+                    </Button>
+                </StackPanel>
+
+                <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
+                    <Button Content="{Binding ChordText}" Click="OnCapture" Tag="{Binding}"
+                            MinWidth="118" FontSize="12" Padding="8,3"
+                            Background="{StaticResource DiscordDeep}"
+                            Foreground="{Binding ChordBrush}"
+                            ToolTip.Tip="Click, then press the keys you want" />
+
+                    <!--
+                        Reserved rather than hidden: collapsing it when a row has no key would
+                        shift every chord button left and right as bindings come and go, which
+                        made the whole list twitch while assigning.
+                    -->
+                    <Panel Width="28">
+                        <Button Click="OnClear" Tag="{Binding}" Classes="row-icon danger"
+                                IsVisible="{Binding HasChord}" ToolTip.Tip="Clear this hotkey">
+                            <TextBlock Classes="icon" Text="&#xf00d;" />
+                        </Button>
+                    </Panel>
+                </StackPanel>
+            </Grid>
+        </DataTemplate>
+    </Window.Resources>
 
     <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="16">
 
         <!-- Status and the bot -->
-        <Border Grid.Row="0" Padding="12,10" CornerRadius="6" Background="#1AFFFFFF">
-            <Grid ColumnDefinitions="*,Auto">
-                <StackPanel Spacing="1">
-                    <TextBlock Text="{Binding StatusText}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+        <Border Grid.Row="0" Padding="12,10" CornerRadius="6" Background="{StaticResource DiscordSurface}">
+            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+                <!-- The Discord idiom: a coloured dot carries the status, read at a glance. -->
+                <Ellipse Grid.Column="0" Width="10" Height="10" VerticalAlignment="Center"
+                         Fill="{Binding StatusBrush}" />
+
+                <StackPanel Grid.Column="1" Spacing="1">
+                    <TextBlock Text="{Binding StatusText}" FontWeight="SemiBold"
+                               Foreground="{StaticResource DiscordHeaderText}" TextTrimming="CharacterEllipsis" />
                     <TextBlock Text="Hotkeys pass through — a bound key still works in your game."
-                               FontSize="11" Opacity="0.6" />
+                               FontSize="11" Foreground="{StaticResource DiscordMutedText}" />
                 </StackPanel>
-                <Button Grid.Column="1" Content="Summon / dismiss" Click="OnSummon"
-                        IsEnabled="{Binding IsPaired}" />
+
+                <Button Grid.Column="2" Content="Summon / dismiss" Click="OnSummon"
+                        IsEnabled="{Binding IsPaired}"
+                        Background="{StaticResource DiscordBlurple}" Foreground="White" />
             </Grid>
         </Border>
 
         <!-- Elevation warning: only when the hook is actually blind to the window in front -->
         <Border Grid.Row="1" Margin="0,8,0,0" Padding="12,10" CornerRadius="6"
-                Background="#33FFB020" IsVisible="{Binding NeedsElevation}">
-            <Grid ColumnDefinitions="*,Auto">
+                Background="{StaticResource DiscordSurface}" BorderThickness="0,0,0,2"
+                BorderBrush="{StaticResource DiscordYellow}" IsVisible="{Binding NeedsElevation}">
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
                 <StackPanel Spacing="1">
-                    <TextBlock Text="A window in front is running as administrator" FontWeight="SemiBold" />
+                    <TextBlock Text="A window in front is running as administrator" FontWeight="SemiBold"
+                               Foreground="{StaticResource DiscordYellow}" />
                     <TextBlock Text="Windows will not let this app see keys going to it, so hotkeys do nothing there."
-                               FontSize="11" Opacity="0.75" TextWrapping="Wrap" />
+                               FontSize="11" Foreground="{StaticResource DiscordMutedText}" TextWrapping="Wrap" />
                 </StackPanel>
                 <Button Grid.Column="1" Content="Restart as admin" Click="OnRelaunch" VerticalAlignment="Center" />
             </Grid>
         </Border>
 
-        <!-- Sounds -->
-        <Grid Grid.Row="2" RowDefinitions="Auto,*" Margin="0,12,0,0">
-            <TextBox Grid.Row="0" PlaceholderText="Search sounds" Text="{Binding Search}" Margin="0,0,0,8" />
+        <!-- Sounds: what is bound, then everything else -->
+        <Grid Grid.Row="2" RowDefinitions="Auto,Auto,*" Margin="0,12,0,0">
 
-            <ListBox Grid.Row="1" ItemsSource="{Binding Visible}" SelectionMode="Single">
-                <ListBox.ItemTemplate>
-                    <DataTemplate x:DataType="vm:SoundRow">
-                        <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" Height="30">
-                            <TextBlock Grid.Column="0" Text="{Binding Emoji}" FontSize="15" VerticalAlignment="Center" Width="26" />
-                            <TextBlock Grid.Column="1" Text="{Binding Name}" VerticalAlignment="Center"
-                                       TextTrimming="CharacterEllipsis" />
-                            <TextBlock Grid.Column="2" Text="{Binding Duration}" FontSize="11" Opacity="0.55"
-                                       VerticalAlignment="Center" Margin="8,0" />
-                            <Button Grid.Column="3" Content="{Binding ChordText}" Click="OnCapture" Tag="{Binding}"
-                                    MinWidth="120" FontSize="12" Padding="8,3" />
-                            <Button Grid.Column="4" Content="✕" Click="OnClear" Tag="{Binding}" Padding="6,3"
-                                    FontSize="11" IsVisible="{Binding HasChord}" Margin="4,0,0,0" />
-                        </Grid>
-                    </DataTemplate>
-                </ListBox.ItemTemplate>
-            </ListBox>
+            <!--
+                The bindings, in their own list. A board of two hundred clips has a handful of
+                keys on it, and finding them alphabetically among the rest is the reason this
+                is separate. Height grows with the content up to a cap, so a few bindings do
+                not steal the whole window from the library below.
+            -->
+            <Border Grid.Row="0" CornerRadius="6" Background="{StaticResource DiscordSurface}" Padding="4"
+                    IsVisible="{Binding HasAssigned}" Margin="0,0,0,10">
+                <ListBox ItemsSource="{Binding Assigned}" SelectionMode="Single" Background="Transparent"
+                         MaxHeight="190" ItemTemplate="{StaticResource SoundRowTemplate}" />
+            </Border>
+
+            <TextBox Grid.Row="1" PlaceholderText="Search sounds" Text="{Binding Search}" Margin="0,0,0,8" />
+
+            <Border Grid.Row="2" CornerRadius="6" Background="{StaticResource DiscordSurface}" Padding="4">
+                <ListBox ItemsSource="{Binding Unassigned}" SelectionMode="Single" Background="Transparent"
+                         ItemTemplate="{StaticResource SoundRowTemplate}" />
+            </Border>
         </Grid>
 
         <!-- Settings -->
-        <Expander Grid.Row="3" Header="Settings" Margin="0,12,0,0">
-            <StackPanel Spacing="6" Margin="0,8,0,0">
+        <!--
+            Open until the device is paired. Pairing lives in here, so a collapsed panel on
+            first run leaves somebody with an empty window and no visible way forward.
+        -->
+        <Expander Grid.Row="3" Header="Settings" Margin="0,12,0,0" Background="{StaticResource DiscordSurface}"
+                  IsExpanded="{Binding !IsPaired, Mode=OneTime}">
+            <StackPanel Spacing="8" Margin="0,8,0,0">
 
                 <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
                     <TextBox Text="{Binding ServerUrl}" PlaceholderText="https://sounds.example" />
-                    <Button Grid.Column="1" Content="Pair this device" Click="OnPair" IsEnabled="{Binding !IsBusy}" />
-                    <Button Grid.Column="2" Content="Unpair" Click="OnUnpair" IsVisible="{Binding IsPaired}" />
+                    <Button Grid.Column="1" Content="Pair this device" Click="OnPair" IsEnabled="{Binding !IsBusy}"
+                            Background="{StaticResource DiscordBlurple}" Foreground="White" />
+                    <Button Grid.Column="2" Content="Unpair" Click="OnUnpair" IsVisible="{Binding IsPaired}"
+                            Foreground="{StaticResource DiscordRed}" Background="Transparent" />
                 </Grid>
 
-                <TextBlock Text="{Binding PairingMessage}" FontSize="11" Opacity="0.7" TextWrapping="Wrap"
+                <TextBlock Text="{Binding PairingMessage}" FontSize="11" TextWrapping="Wrap"
+                           Foreground="{StaticResource DiscordMutedText}"
                            IsVisible="{Binding PairingMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
 
                 <WrapPanel>
@@ -80,7 +159,7 @@
                 </WrapPanel>
 
                 <TextBlock Text="The popup cannot draw over a game in exclusive fullscreen; the sound always works."
-                           FontSize="11" Opacity="0.55" TextWrapping="Wrap" />
+                           FontSize="11" Foreground="{StaticResource DiscordMutedText}" TextWrapping="Wrap" />
             </StackPanel>
         </Expander>
     </Grid>

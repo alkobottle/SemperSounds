@@ -81,6 +81,28 @@ public class HotkeyChordTests
         Assert.True(new HotkeyChord(VkF1, HotkeyModifiers.Control).IsValid);
     }
 
+    [Theory]
+    [InlineData(0x10)]  // Shift
+    [InlineData(0xA0)]  // LShift
+    [InlineData(0x11)]  // Control
+    [InlineData(0xA3)]  // RControl
+    [InlineData(0x12)]  // Alt
+    [InlineData(0x5B)]  // LWin
+    public void ModifierKeys_AreRecognisedAsSuch(int virtualKey)
+    {
+        // Capture depends on this. Assigning Ctrl+F1 means pressing Ctrl first, and a capture
+        // that accepted that keystroke would hand back an invalid chord and end the attempt
+        // before the user had finished making it - so combos could never be assigned at all.
+        Assert.True(HotkeyChord.IsModifier(virtualKey));
+    }
+
+    [Theory]
+    [InlineData(VkF1)]
+    [InlineData(VkA)]
+    [InlineData(0x20)]  // Space
+    public void OrdinaryKeys_AreNotModifiers(int virtualKey) =>
+        Assert.False(HotkeyChord.IsModifier(virtualKey));
+
     [Fact]
     public void AnEmptyChord_IsNotValid()
     {

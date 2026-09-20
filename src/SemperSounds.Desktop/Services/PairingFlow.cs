@@ -4,6 +4,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text;
+using SemperSounds.Desktop.Core;
 
 namespace SemperSounds.Desktop.Services;
 
@@ -52,18 +53,18 @@ public sealed class PairingFlow(HttpClient http)
 
         using var listener = new HttpListener();
         var port = FreePort();
-        var redirectUri = $"http://127.0.0.1:{port}/callback";
-
-        // The prefix keeps the trailing slash HttpListener requires; the redirect_uri must not
-        // have one, or it will not match what the server was told.
-        listener.Prefixes.Add($"http://127.0.0.1:{port}/callback/");
-        listener.Prefixes.Add($"http://127.0.0.1:{port}/callback");
+        var redirectUri = LoopbackCallback.RedirectUriFor(port);
 
         try
         {
+            // Inside the try because Prefixes.Add throws too, and throws something other than
+            // HttpListenerException: a malformed prefix is an ArgumentException raised before
+            // the listener ever starts. Leaving it outside is what turned a one-character
+            // mistake into the whole app disappearing when somebody pressed Pair.
+            listener.Prefixes.Add(LoopbackCallback.PrefixFor(port));
             listener.Start();
         }
-        catch (HttpListenerException ex)
+        catch (Exception ex) when (ex is HttpListenerException or ArgumentException or ObjectDisposedException)
         {
             return PairingResult.Fail($"Could not listen for the browser's reply: {ex.Message}");
         }
@@ -76,7 +77,17 @@ public sealed class PairingFlow(HttpClient http)
                     $"&code_challenge={Uri.EscapeDataString(challenge)}",
         }.Uri;
 
-        Process.Start(new ProcessStartInfo(authorize.ToString()) { UseShellExecute = true });
+        try
+        {
+            Process.Start(new ProcessStartInfo(authorize.ToString()) { UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            // No default browser, or the shell refusing to launch one. Reported rather than
+            // thrown: the caller is an event handler, and an escape from here kills the app.
+            listener.Stop();
+            return PairingResult.Fail($"Could not open your browser: {ex.Message}");
+        }
 
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(BrowserTimeout);

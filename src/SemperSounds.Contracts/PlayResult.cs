@@ -25,6 +25,13 @@ public enum PlayFailure
     /// <summary>The per-user cooldown has not elapsed. Retrying immediately cannot help.</summary>
     Cooldown,
 
+    /// <summary>
+    /// That clip is still sounding. Distinct from <see cref="Cooldown"/>: this one is about
+    /// the sound, not the person, and it clears the moment the clip ends rather than after a
+    /// configured wait.
+    /// </summary>
+    AlreadyPlaying,
+
     /// <summary>The sound or its audio file is gone. The binding is stale.</summary>
     Missing,
 

@@ -24,6 +24,7 @@ public enum LinkState { Offline, Connecting, Online }
 public sealed class SoundboardConnection : IAsyncDisposable
 {
     private readonly Func<string?> _tokenProvider;
+    private readonly RetriggerGuard _guard = new();
     private HubConnection? _hub;
 
     public SoundboardConnection(Func<string?> tokenProvider) => _tokenProvider = tokenProvider;
@@ -155,22 +156,57 @@ public sealed class SoundboardConnection : IAsyncDisposable
     /// </remarks>
     public async Task<PlayResult> PlayAsync(Guid soundId, bool autoSummon)
     {
+        // Refused here rather than at the far end, so a hammered key costs nothing at all.
+        // The duration comes from the library the client already holds; the server re-checks
+        // against the mixer regardless, and it is the one that speaks for everybody.
+        var duration = Sounds.FirstOrDefault(s => s.Id == soundId) is { } sound
+            ? TimeSpan.FromMilliseconds(sound.DurationMs)
+            : (TimeSpan?)null;
+
+        if (!_guard.TryBegin(soundId, duration))
+        {
+            return PlayResult.Fail(PlayFailure.AlreadyPlaying, "That sound is still playing.");
+        }
+
         var result = await InvokePlayAsync(DesktopHubMethods.Play, soundId);
 
         if (!AutoSummonPolicy.ShouldSummon(result.Failure, autoSummon))
         {
+            if (!result.IsSuccess)
+            {
+                // It never started, so nothing should be waiting on it to finish.
+                _guard.Clear(soundId);
+            }
+
             return result;
         }
 
         var joined = await JoinAsync();
-        return joined.IsSuccess ? await InvokePlayAsync(DesktopHubMethods.Play, soundId) : joined;
+        if (!joined.IsSuccess)
+        {
+            _guard.Clear(soundId);
+            return joined;
+        }
+
+        var retried = await InvokePlayAsync(DesktopHubMethods.Play, soundId);
+        if (!retried.IsSuccess)
+        {
+            _guard.Clear(soundId);
+        }
+
+        return retried;
     }
 
     public Task<PlayResult> JoinAsync() => InvokePlayAsync(DesktopHubMethods.Join, null);
 
     public Task LeaveAsync() => InvokeAsync(DesktopHubMethods.Leave);
 
-    public Task StopAllAsync() => InvokeAsync(DesktopHubMethods.StopAll);
+    public Task StopAllAsync()
+    {
+        // The clips are ending, so nothing is still playing and nothing should stay blocked.
+        _guard.Reset();
+        return InvokeAsync(DesktopHubMethods.StopAll);
+    }
 
     private async Task<PlayResult> InvokePlayAsync(string method, Guid? soundId)
     {

@@ -35,3 +35,6 @@ Thumbs.db
 
 ## Design notes from the brainstorming workflow. Working material, kept locally.
 /docs/superpowers/specs/
+
+# Desktop publish output.
+/dist/

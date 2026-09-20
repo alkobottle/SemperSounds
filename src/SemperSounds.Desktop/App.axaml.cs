@@ -2,9 +2,13 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
+using Avalonia.Media;
 using Avalonia.Platform;
+using Avalonia.Styling;
 using Avalonia.Threading;
 using SemperSounds.Desktop.Services;
+using SukiUI;
+using SukiUI.Models;
 using SemperSounds.Desktop.ViewModels;
 using SemperSounds.Desktop.Views;
 
@@ -12,6 +16,12 @@ namespace SemperSounds.Desktop;
 
 public partial class App : Application
 {
+    /// <summary>
+    /// Set by <see cref="Program"/> before Avalonia starts. Non-null by the time the lifetime
+    /// runs, because a second copy never gets this far.
+    /// </summary>
+    public SingleInstance? Instance { get; set; }
+
     private SingleInstance? _instance;
     private TrayIcon? _tray;
     private MainWindowViewModel? _viewModel;
@@ -28,20 +38,12 @@ public partial class App : Application
             return;
         }
 
-        _instance = new SingleInstance();
-        if (!_instance.IsFirstInstance)
-        {
-            // Bring the copy that is already running forward, then leave. Without this, running
-            // the app again while it sits in the tray appears to do nothing at all.
-            _instance.SignalExistingInstance();
-            _instance.Dispose();
-            desktop.Shutdown();
-            return;
-        }
 
         // Without this the first close of the settings window ends the process, taking the
         // keyboard hook with it — the app would work exactly once per launch.
         desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
+
+        ApplyDiscordTheme();
 
         _viewModel = new MainWindowViewModel();
         _viewModel.ExitRequested += () => Dispatcher.UIThread.Post(() => desktop.Shutdown());
@@ -55,7 +57,8 @@ public partial class App : Application
         _toast.Prepare();
         _viewModel.Toast = _toast;
 
-        _instance.ShowRequested += () => Dispatcher.UIThread.Post(ShowWindow);
+        _instance = Instance;
+        _instance!.ShowRequested += () => Dispatcher.UIThread.Post(ShowWindow);
         _instance.ListenForOtherInstances();
 
         desktop.Exit += (_, _) =>
@@ -78,6 +81,26 @@ public partial class App : Application
     }
 
     /// <summary>
+    /// Puts SukiUI into dark mode and gives it Discord's brand colours.
+    /// </summary>
+    /// <remarks>
+    /// Done in code because SukiUI owns its own base theme: the Application's
+    /// <c>RequestedThemeVariant</c> does not drive it, and leaving it to decide produced a
+    /// light chrome under surfaces written for a dark one — white text on pale grey, unreadable
+    /// throughout. Setting it explicitly is the only way to know which variant is in force.
+    /// </remarks>
+    private void ApplyDiscordTheme()
+    {
+        var theme = SukiTheme.GetInstance(this);
+
+        theme.ChangeBaseTheme(ThemeVariant.Dark);
+        theme.ChangeColorTheme(new SukiColorTheme(
+            "Discord",
+            Color.Parse("#5865F2"),   // blurple, for primary actions
+            Color.Parse("#23A559"))); // the online green, as the accent
+    }
+
+    /// <summary>
     /// Builds the tray icon in code rather than XAML, so its tooltip can follow the live
     /// status — which is the only thing telling the user whether a key press would work while
     /// no window is open.
@@ -92,7 +115,7 @@ public partial class App : Application
 
         _tray = new TrayIcon
         {
-            Icon = new WindowIcon(AssetLoader.Open(new Uri("avares://SemperSounds.Desktop/Assets/tray.ico"))),
+            Icon = new WindowIcon(AssetLoader.Open(new Uri("avares://SemperSounds.Desktop/Assets/app.ico"))),
             ToolTipText = "SemperSounds",
             IsVisible = true,
             Menu = [open, new NativeMenuItemSeparator(), exit],

@@ -211,6 +211,16 @@ public sealed class PlaybackService(
             return PlaybackResult.Fail(PlayFailure.WrongChannel, "You have to be in the same voice channel as the bot to play sounds.");
         }
 
+        // Refused rather than layered. Leaning on a key used to stack a clip on top of itself
+        // once per press, which is deafening and is not what anybody pressing twice wants.
+        // Read from the mixer rather than from PlayingSoundIds, which is a snapshot the pump
+        // refreshes a frame later and so still reads empty during exactly the rapid presses
+        // this exists to catch.
+        if (_mixer.ActiveKeys.Contains(soundId))
+        {
+            return PlaybackResult.Fail(PlayFailure.AlreadyPlaying, "That sound is still playing.");
+        }
+
         if (IsOnCooldown(userId, out var remaining))
         {
             return PlaybackResult.Fail(PlayFailure.Cooldown, $"Slow down — {remaining.TotalSeconds:0.#}s to go.");

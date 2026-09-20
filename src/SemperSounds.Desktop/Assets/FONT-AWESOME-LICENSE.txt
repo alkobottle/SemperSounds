@@ -1,0 +1,15 @@
+Font Awesome Free 6
+https://fontawesome.com
+
+fa-solid-900.ttf is bundled with this application.
+
+  Fonts ....... SIL OFL 1.1 ....... https://scripts.sil.org/OFL
+  Icons ....... CC BY 4.0 ......... https://creativecommons.org/licenses/by/4.0/
+
+Attribution, as CC BY 4.0 requires: icon artwork by Font Awesome.
+
+The font is embedded and referenced by family name rather than through an Avalonia
+integration package. Projektanker.Icons.Avalonia was tried first and is built against
+Avalonia 11, which throws MissingMethodException on TemplateBinding.ProvideValue at the
+moment the first icon is measured under Avalonia 12 - a runtime failure with no build-time
+warning. A font file has no such coupling to the toolkit's version.

@@ -61,6 +61,22 @@ public partial class MainWindow : Window
         }
     }
 
+    private async void OnPreview(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Button { Tag: SoundRow row } && Model is not null)
+        {
+            await Model.PreviewAsync(row);
+        }
+    }
+
+    private async void OnPlay(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Button { Tag: SoundRow row } && Model is not null)
+        {
+            await Model.PlayNowAsync(row);
+        }
+    }
+
     private void OnClear(object? sender, RoutedEventArgs e)
     {
         if (sender is Button { Tag: SoundRow row } && Model is not null)

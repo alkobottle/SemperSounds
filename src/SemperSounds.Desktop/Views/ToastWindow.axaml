@@ -11,10 +11,12 @@
         TransparencyLevelHint="Transparent"
         Focusable="False">
 
-    <Border Background="#E6101418" CornerRadius="8" Padding="14,10" BorderThickness="1" BorderBrush="#33FFFFFF">
+    <!-- The darkest Discord surface, so it reads as part of the same family over a game. -->
+    <Border Background="#1E1F22" CornerRadius="8" Padding="14,10" BorderThickness="1" BorderBrush="#3F4147">
         <StackPanel Spacing="2">
-            <TextBlock Name="TitleText" FontWeight="SemiBold" FontSize="14" Foreground="White" TextTrimming="CharacterEllipsis" />
-            <TextBlock Name="DetailText" FontSize="12" Foreground="#B0FFFFFF" TextWrapping="Wrap" MaxLines="2" />
+            <TextBlock Name="TitleText" FontWeight="SemiBold" FontSize="14" Foreground="#F2F3F5"
+                       TextTrimming="CharacterEllipsis" />
+            <TextBlock Name="DetailText" FontSize="12" Foreground="#949BA4" TextWrapping="Wrap" MaxLines="2" />
         </StackPanel>
     </Border>
 

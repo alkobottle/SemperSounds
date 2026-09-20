@@ -1,6 +1,8 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using Avalonia.Media;
+using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using SemperSounds.Contracts;
 using SemperSounds.Desktop.Core;
@@ -34,12 +36,51 @@ public abstract class Observable : INotifyPropertyChanged
 public sealed class SoundRow(SoundSummary sound) : Observable
 {
     private HotkeyChord _chord = HotkeyChord.None;
+    private Bitmap? _emojiImage;
+    private bool _isPreviewing;
 
     public Guid Id { get; } = sound.Id;
 
     public string Name { get; } = sound.Name;
 
     public string Emoji { get; } = sound.EmojiText;
+
+    /// <summary>Null for a standard emoji, which is a character the font already draws.</summary>
+    public string? EmojiImageUrl { get; } = sound.EmojiImageUrl;
+
+    /// <summary>The fetched picture, once it arrives. Null until then, and null if it never does.</summary>
+    public Bitmap? EmojiImage
+    {
+        get => _emojiImage;
+        private set
+        {
+            if (Set(ref _emojiImage, value))
+            {
+                Raise(nameof(HasEmojiImage));
+                Raise(nameof(ShowEmojiText));
+            }
+        }
+    }
+
+    public bool HasEmojiImage => _emojiImage is not null;
+
+    /// <summary>Show the text form until a picture replaces it, and for ever if none is coming.</summary>
+    public bool ShowEmojiText => _emojiImage is null;
+
+    /// <summary>Fetches the custom emoji, if this sound has one. Never throws.</summary>
+    public async Task LoadEmojiAsync(EmojiImages images)
+    {
+        if (EmojiImageUrl is null)
+        {
+            return;
+        }
+
+        var bitmap = await images.GetAsync(EmojiImageUrl);
+        if (bitmap is not null)
+        {
+            EmojiImage = bitmap;
+        }
+    }
 
     public string Duration { get; } = $"{sound.DurationMs / 1000.0:0.0}s";
 
@@ -54,13 +95,33 @@ public sealed class SoundRow(SoundSummary sound) : Observable
             {
                 Raise(nameof(ChordText));
                 Raise(nameof(HasChord));
+                Raise(nameof(ChordBrush));
             }
         }
     }
 
     public string ChordText => _chord.IsValid ? _chord.ToString() : "Click to assign";
 
+    /// <summary>Blurple once a key is on it, muted while the row is only an invitation.</summary>
+    public IBrush ChordBrush => _chord.IsValid ? DiscordPalette.Blurple : DiscordPalette.Muted;
+
     public bool HasChord => _chord.IsValid;
+
+    /// <summary>True while this clip is the one previewing locally.</summary>
+    public bool IsPreviewing
+    {
+        get => _isPreviewing;
+        set
+        {
+            if (Set(ref _isPreviewing, value))
+            {
+                Raise(nameof(PreviewIcon));
+            }
+        }
+    }
+
+    /// <summary>The same button stops what it started, so it has to say which it will do.</summary>
+    public string PreviewIcon => _isPreviewing ? Glyphs.Stop : Glyphs.Headphones;
 
     public bool Matches(string term) =>
         term.Length == 0 ||
@@ -77,6 +138,8 @@ public sealed class MainWindowViewModel : Observable, IDisposable
     private readonly HotkeyRouter _router;
     private readonly HotkeyDispatcher _dispatcher;
     private readonly PairingFlow _pairing;
+    private readonly EmojiImages _emoji;
+    private readonly SoundPreview _preview;
 
     private string? _token;
     private string _search = string.Empty;
@@ -95,11 +158,14 @@ public sealed class MainWindowViewModel : Observable, IDisposable
         _router = new HotkeyRouter(Config);
         _dispatcher = new HotkeyDispatcher(_hook, _router, _connection, () => Config);
         _pairing = new PairingFlow(_http);
+        _emoji = new EmojiImages(_http);
+        _preview = new SoundPreview(_http, () => _token);
+        _preview.Changed += () => Dispatcher.UIThread.Post(RefreshPreviewState);
 
         _connection.Changed += OnConnectionChanged;
         _connection.LibraryChanged += () => Dispatcher.UIThread.Post(ReconcileBindings);
         _dispatcher.Pressed += OnPressed;
-        _dispatcher.MuteChanged += () => Dispatcher.UIThread.Post(() => { Raise(nameof(IsMuted)); Raise(nameof(StatusText)); });
+        _dispatcher.MuteChanged += () => Dispatcher.UIThread.Post(() => { Raise(nameof(IsMuted)); Raise(nameof(StatusText)); Raise(nameof(StatusBrush)); });
         _dispatcher.HookRecovered += () => Dispatcher.UIThread.Post(() =>
             Notify(new PressOutcome(false, "Hotkeys were restored", "Windows had dropped the keyboard hook.")));
 
@@ -114,7 +180,20 @@ public sealed class MainWindowViewModel : Observable, IDisposable
 
     public ObservableCollection<SoundRow> Rows { get; } = [];
 
-    public ObservableCollection<SoundRow> Visible { get; } = [];
+    /// <summary>
+    /// Sounds with a key on them, kept in their own list above the rest.
+    /// </summary>
+    /// <remarks>
+    /// A board of two hundred clips has perhaps six bindings in it, and hunting for them
+    /// alphabetically among the rest is the whole reason this is separate. Deliberately not
+    /// filtered by the search box: searching is for finding something new to bind, and having
+    /// your existing bindings disappear while you do it helps nobody.
+    /// </remarks>
+    public ObservableCollection<SoundRow> Assigned { get; } = [];
+
+    public ObservableCollection<SoundRow> Unassigned { get; } = [];
+
+    public bool HasAssigned => Assigned.Count > 0;
 
     public event Action? ExitRequested;
 
@@ -260,6 +339,14 @@ public sealed class MainWindowViewModel : Observable, IDisposable
 
             await _connection.ConnectAsync(Config.ServerUrl);
         }
+        catch (Exception ex)
+        {
+            // Deliberately catching everything. Every caller of this is an `async void` event
+            // handler, where an escaping exception is not an error dialog — it is the whole
+            // tray app vanishing mid-click, which is exactly how a malformed listener prefix
+            // presented itself. Pairing failing is worth a sentence, never a crash.
+            PairingMessage = $"Pairing failed: {ex.Message}";
+        }
         finally
         {
             IsBusy = false;
@@ -278,7 +365,8 @@ public sealed class MainWindowViewModel : Observable, IDisposable
         _store.ClearToken();
         _token = null;
         Rows.Clear();
-        Visible.Clear();
+        Assigned.Clear();
+        Unassigned.Clear();
         Raise(nameof(IsPaired));
         StatusText = "Not paired yet.";
         PairingMessage = "This device has been unpaired locally. Revoke it on the website to withdraw its access.";
@@ -318,6 +406,39 @@ public sealed class MainWindowViewModel : Observable, IDisposable
     public Task<HotkeyChord> CaptureChordAsync(CancellationToken cancellationToken) =>
         _hook.CaptureNextAsync(cancellationToken);
 
+    /// <summary>
+    /// Auditions a clip through this machine, not through the bot.
+    /// </summary>
+    /// <remarks>
+    /// Hunting for the right clip should not fire every candidate into a channel full of
+    /// people, which is exactly what previewing through the bot would mean.
+    /// </remarks>
+    public async Task PreviewAsync(SoundRow row)
+    {
+        var error = await _preview.PlayAsync(row.Id, Config.ServerUrl);
+        if (error is not null)
+        {
+            StatusText = error;
+        }
+    }
+
+    /// <summary>Plays a clip into the channel, exactly as pressing its key would.</summary>
+    public async Task PlayNowAsync(SoundRow row)
+    {
+        var result = await _connection.PlayAsync(row.Id, Config.AutoSummon);
+
+        StatusText = result.IsSuccess ? row.Name : $"{row.Name} — {result.Error}";
+    }
+
+    /// <summary>Keeps each row's preview button in step with what is actually sounding.</summary>
+    private void RefreshPreviewState()
+    {
+        foreach (var row in Rows)
+        {
+            row.IsPreviewing = row.Id == _preview.Playing;
+        }
+    }
+
     public void Show() => ShowWindowRequested?.Invoke();
 
     public void Exit() => ExitRequested?.Invoke();
@@ -343,11 +464,19 @@ public sealed class MainWindowViewModel : Observable, IDisposable
 
         row.Chord = chord;
         Rebind();
+
+        // Re-partitioned here rather than inside Rebind, because a row that has just gained or
+        // lost a key has to move between the two lists.
+        ApplyFilter();
     }
 
     private void OnConnectionChanged() => Dispatcher.UIThread.Post(() =>
     {
         StatusText = Describe();
+
+        // Raised by hand: the dot is computed from connection state rather than from
+        // StatusText, so nothing else would tell the binding it had changed.
+        Raise(nameof(StatusBrush));
         Raise(nameof(NeedsElevation));
 
         if (_connection.Sounds.Count != 0 && Rows.Count == 0)
@@ -355,6 +484,26 @@ public sealed class MainWindowViewModel : Observable, IDisposable
             ReconcileBindings();
         }
     });
+
+    /// <summary>
+    /// The status dot, using the same colours Discord uses for presence.
+    /// </summary>
+    /// <remarks>
+    /// Green only when a key press would actually play something. Yellow is the honest middle:
+    /// the link is up but something still stands in the way, and the sentence beside it says
+    /// what. Grey means the app is deliberately not listening.
+    /// </remarks>
+    public IBrush StatusBrush => _router.IsMuted
+        ? DiscordPalette.Muted
+        : _connection.State switch
+        {
+            LinkState.Offline => DiscordPalette.Red,
+            LinkState.Connecting => DiscordPalette.Yellow,
+            _ when !_connection.Bot.IsBotReady => DiscordPalette.Yellow,
+            _ when _connection.Bot.IsBotInYourChannel => DiscordPalette.Green,
+            _ when _connection.Bot.AreYouInVoice => DiscordPalette.Yellow,
+            _ => DiscordPalette.Muted,
+        };
 
     private string Describe()
     {
@@ -396,6 +545,7 @@ public sealed class MainWindowViewModel : Observable, IDisposable
             }
 
             Rows.Add(row);
+            _ = row.LoadEmojiAsync(_emoji);
         }
 
         ApplyFilter();
@@ -404,11 +554,24 @@ public sealed class MainWindowViewModel : Observable, IDisposable
 
     private void ApplyFilter()
     {
-        Visible.Clear();
-        foreach (var row in Rows.Where(r => r.Matches(_search.Trim())))
+        var term = _search.Trim();
+
+        Assigned.Clear();
+        Unassigned.Clear();
+
+        foreach (var row in Rows)
         {
-            Visible.Add(row);
+            if (row.Chord.IsValid)
+            {
+                Assigned.Add(row);
+            }
+            else if (row.Matches(term))
+            {
+                Unassigned.Add(row);
+            }
         }
+
+        Raise(nameof(HasAssigned));
     }
 
     private void Rebind()
@@ -436,6 +599,7 @@ public sealed class MainWindowViewModel : Observable, IDisposable
 
     public void Dispose()
     {
+        _preview.Dispose();
         _dispatcher.Dispose();
         _hook.Dispose();
         _connection.DisposeAsync().AsTask().GetAwaiter().GetResult();

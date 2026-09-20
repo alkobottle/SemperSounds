@@ -97,6 +97,7 @@ public class DesktopConfigTests
     [InlineData(PlayFailure.NotInVoice, false)]
     [InlineData(PlayFailure.Cooldown, false)]
     [InlineData(PlayFailure.Missing, false)]
+    [InlineData(PlayFailure.AlreadyPlaying, false)]
     [InlineData(PlayFailure.Other, false)]
     [InlineData(PlayFailure.None, false)]
     public void AutoSummon_OnlyRetriesWhatAJoinCouldFix(PlayFailure failure, bool expected) =>
@@ -109,12 +110,16 @@ public class DesktopConfigTests
     }
 
     [Fact]
-    public void EveryFailure_IsWorthReporting()
+    public void FailuresAreReported_ExceptTheOneThatIsAudible()
     {
         // Including the cooldown. A press that does nothing and says nothing looks exactly
         // like the keyboard hook having died, which is a real failure mode here.
         Assert.True(AutoSummonPolicy.ShouldReport(PlayFailure.Cooldown));
         Assert.True(AutoSummonPolicy.ShouldReport(PlayFailure.Missing));
         Assert.False(AutoSummonPolicy.ShouldReport(PlayFailure.None));
+
+        // The exception. A clip that is still playing is announcing itself out loud already,
+        // so a cue on every press of a held key would be the very noise this prevents.
+        Assert.False(AutoSummonPolicy.ShouldReport(PlayFailure.AlreadyPlaying));
     }
 }

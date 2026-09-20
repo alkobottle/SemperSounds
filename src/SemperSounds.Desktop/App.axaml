@@ -4,8 +4,104 @@
              x:Class="SemperSounds.Desktop.App"
              RequestedThemeVariant="Dark">
 
+    <!--
+        Discord's own dark palette, so the app looks like it belongs beside the client it
+        plays into. Named rather than used inline: every surface below is an opaque colour,
+        never a translucent white over whatever the theme happens to provide. A translucent
+        overlay is what made the first version unreadable — it assumed a dark backdrop, and
+        rendered as white-on-grey the moment the theme underneath came up light.
+    -->
+    <Application.Resources>
+        <Color x:Key="DiscordDeepColor">#1E1F22</Color>
+        <Color x:Key="DiscordSurfaceColor">#2B2D31</Color>
+        <Color x:Key="DiscordBaseColor">#313338</Color>
+        <Color x:Key="DiscordRaisedColor">#383A40</Color>
+        <Color x:Key="DiscordBlurpleColor">#5865F2</Color>
+
+        <SolidColorBrush x:Key="DiscordDeep" Color="#1E1F22" />
+        <SolidColorBrush x:Key="DiscordSurface" Color="#2B2D31" />
+        <SolidColorBrush x:Key="DiscordBase" Color="#313338" />
+        <SolidColorBrush x:Key="DiscordRaised" Color="#383A40" />
+        <SolidColorBrush x:Key="DiscordDivider" Color="#3F4147" />
+
+        <!-- Discord's three text weights. Muted is #949BA4, which clears AA on every surface above. -->
+        <SolidColorBrush x:Key="DiscordHeaderText" Color="#F2F3F5" />
+        <SolidColorBrush x:Key="DiscordText" Color="#DBDEE1" />
+        <SolidColorBrush x:Key="DiscordMutedText" Color="#949BA4" />
+
+        <SolidColorBrush x:Key="DiscordBlurple" Color="#5865F2" />
+        <SolidColorBrush x:Key="DiscordGreen" Color="#23A559" />
+        <SolidColorBrush x:Key="DiscordYellow" Color="#F0B132" />
+        <SolidColorBrush x:Key="DiscordRed" Color="#DA373C" />
+
+        <!--
+            Font Awesome Free Solid, embedded. The family name must match the font's own, which
+            is read from its name table rather than guessed - a wrong one fails silently, by
+            falling back to the default font and rendering the glyph codepoints as boxes.
+            See Assets/FONT-AWESOME-LICENSE.txt for attribution and for why the font is bundled
+            rather than pulled in through an integration package.
+        -->
+        <FontFamily x:Key="IconFont">avares://SemperSounds.Desktop/Assets/fa-solid-900.ttf#Font Awesome 6 Free Solid</FontFamily>
+    </Application.Resources>
+
     <Application.Styles>
         <suki:SukiTheme ThemeColor="Blue" />
+
+        <!--
+            SukiUI's controls come with their own surface colours, which are close to Discord's
+            but not the same. These pin the handful the app actually uses, so a row of controls
+            does not read as two palettes side by side.
+        -->
+        <Style Selector="TextBox">
+            <Setter Property="Background" Value="{StaticResource DiscordDeep}" />
+            <Setter Property="Foreground" Value="{StaticResource DiscordText}" />
+        </Style>
+
+        <Style Selector="ListBox">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+
+        <Style Selector="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource DiscordText}" />
+        </Style>
+
+        <Style Selector="CheckBox">
+            <Setter Property="Foreground" Value="{StaticResource DiscordText}" />
+        </Style>
+
+        <!-- Every glyph on a row button is drawn by this. -->
+        <Style Selector="TextBlock.icon">
+            <Setter Property="FontFamily" Value="{StaticResource IconFont}" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="HorizontalAlignment" Value="Center" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+
+        <!--
+            The small square icon buttons on each sound row. Flat and quiet until pointed at,
+            so a list of two hundred rows reads as a list rather than as a wall of buttons.
+        -->
+        <Style Selector="Button.row-icon">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="{StaticResource DiscordMutedText}" />
+            <Setter Property="Width" Value="28" />
+            <Setter Property="Height" Value="24" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="CornerRadius" Value="4" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+
+        <Style Selector="Button.row-icon:pointerover">
+            <Setter Property="Background" Value="{StaticResource DiscordRaised}" />
+            <Setter Property="Foreground" Value="{StaticResource DiscordHeaderText}" />
+        </Style>
+
+        <!-- Destructive, so it only turns red once the pointer is actually on it. -->
+        <Style Selector="Button.row-icon.danger:pointerover">
+            <Setter Property="Background" Value="#3A2326" />
+            <Setter Property="Foreground" Value="{StaticResource DiscordRed}" />
+        </Style>
     </Application.Styles>
 
 </Application>

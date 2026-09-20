@@ -161,6 +161,17 @@ public readonly record struct HotkeyChord(int VirtualKey, HotkeyModifiers Modifi
         return $"VK{virtualKey:X2}";
     }
 
+    /// <summary>
+    /// True for Shift, Control, Alt and the Windows keys, in both their generic and
+    /// side-specific forms.
+    /// </summary>
+    /// <remarks>
+    /// Public because capture needs it. Somebody assigning Ctrl+F1 presses Ctrl first, and a
+    /// capture that took the first key it saw would take that one - producing an invalid chord
+    /// and eating the attempt, so combos could never be assigned at all.
+    /// </remarks>
+    public static bool IsModifier(int virtualKey) => IsModifierKey(virtualKey);
+
     private static bool IsModifierKey(int virtualKey) => virtualKey
         is 0x10 or 0xA0 or 0xA1   // Shift, LShift, RShift
         or 0x11 or 0xA2 or 0xA3   // Control, LControl, RControl

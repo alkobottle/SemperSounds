@@ -46,9 +46,13 @@ public static class AutoSummonPolicy
     /// Whether a failure is worth telling the user about.
     /// </summary>
     /// <remarks>
-    /// Everything is, including the cooldown. A press that does nothing and says nothing is
-    /// indistinguishable from the hook having died — which is a real failure mode here, so the
-    /// two must never look alike.
+    /// Nearly everything is, including the cooldown: a press that does nothing and says nothing
+    /// is indistinguishable from the hook having died, which is a real failure mode here.
+    ///
+    /// The exception is a clip that is still playing. That one already announces itself, out
+    /// loud, in the voice channel — reporting it as well would mean a cue or a popup on every
+    /// press of a held key, which is the very noise this refusal exists to prevent.
     /// </remarks>
-    public static bool ShouldReport(PlayFailure failure) => failure != PlayFailure.None;
+    public static bool ShouldReport(PlayFailure failure) =>
+        failure is not (PlayFailure.None or PlayFailure.AlreadyPlaying);
 }

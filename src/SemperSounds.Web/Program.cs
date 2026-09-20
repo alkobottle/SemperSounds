@@ -1,6 +1,7 @@
 using AspNet.Security.OAuth.Discord;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.HttpOverrides;
@@ -240,7 +241,15 @@ app.MapGet("/sounds/{id:guid}/preview", async (
     return File.Exists(path)
         ? Results.File(Path.GetFullPath(path), "audio/mpeg", enableRangeProcessing: true)
         : Results.NotFound();
-}).RequireAuthorization();
+})
+// Both schemes, not just the cookie. The desktop client fetches the same mp3 to preview a
+// clip locally before binding a key to it, and it holds a device token rather than a cookie.
+// Membership is still required either way: a device token is only ever issued to somebody who
+// completed the Discord sign-in this endpoint would otherwise demand.
+.RequireAuthorization(new AuthorizeAttribute
+{
+    AuthenticationSchemes = $"{CookieAuthenticationDefaults.AuthenticationScheme},{DeviceTokenDefaults.Scheme}",
+});
 
 app.Run();
 
