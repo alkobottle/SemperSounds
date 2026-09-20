@@ -1,0 +1,21 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="SemperSounds.Desktop.Views.ToastWindow"
+        Width="320" Height="72"
+        WindowDecorations="None"
+        ShowInTaskbar="False"
+        Topmost="True"
+        ShowActivated="False"
+        CanResize="False"
+        Background="Transparent"
+        TransparencyLevelHint="Transparent"
+        Focusable="False">
+
+    <Border Background="#E6101418" CornerRadius="8" Padding="14,10" BorderThickness="1" BorderBrush="#33FFFFFF">
+        <StackPanel Spacing="2">
+            <TextBlock Name="TitleText" FontWeight="SemiBold" FontSize="14" Foreground="White" TextTrimming="CharacterEllipsis" />
+            <TextBlock Name="DetailText" FontSize="12" Foreground="#B0FFFFFF" TextWrapping="Wrap" MaxLines="2" />
+        </StackPanel>
+    </Border>
+
+</Window>

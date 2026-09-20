@@ -1,0 +1,111 @@
+@page "/device/authorize"
+@attribute [Authorize]
+@inject DeviceCodeStore Codes
+@inject NavigationManager Navigation
+@inject AuthenticationStateProvider AuthState
+
+@*
+    Where a desktop client's pairing is approved.
+
+    An ordinary interactive component rather than a form post, because App.razor puts every
+    routable page in this app on InteractiveServer — there is no static-SSR form path here, and
+    the circuit is already cookie-authenticated, so antiforgery has nothing to add.
+
+    [Authorize] is what does the real work: reaching this page at all means riding the existing
+    Discord challenge, which fails the ticket outright for anyone who is not in the guild. A
+    device can therefore never be paired to somebody who could not sign in anyway.
+*@
+
+<PageTitle>Pair a device · SemperSounds</PageTitle>
+
+@if (!_redirectIsValid)
+{
+    <MudAlert Severity="Severity.Error" Class="mb-4">
+        <MudText Typo="Typo.subtitle2">That pairing link is not valid.</MudText>
+        <MudText Typo="Typo.body2">
+            A device can only be paired from an app running on this computer. Nothing has been
+            approved and no credential has been issued.
+        </MudText>
+    </MudAlert>
+
+    <MudButton Href="/board" Variant="Variant.Text">Back to the board</MudButton>
+}
+else
+{
+    <MudText Typo="Typo.h5" GutterBottom="true">Pair a device</MudText>
+
+    <MudText Typo="Typo.body2" Class="mb-4">
+        SemperSounds Desktop on this computer is asking to play sounds as
+        <strong>@_userName</strong>. It will be able to do exactly what you can do on the
+        board — play clips, and summon the bot to your channel.
+    </MudText>
+
+    <MudTextField @bind-Value="_deviceName" Label="Name this device" Variant="Variant.Outlined"
+                  MaxLength="@DeviceToken.MaxNameLength" Immediate="true" Class="mb-4"
+                  HelperText="So you can tell it apart on the devices page later." />
+
+    @if (_error is not null)
+    {
+        <MudAlert Severity="Severity.Error" Class="mb-4">@_error</MudAlert>
+    }
+
+    <MudStack Row="true" Spacing="2">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="ApproveAsync"
+                   Disabled="@(_busy || string.IsNullOrWhiteSpace(_deviceName))">
+            Approve
+        </MudButton>
+        <MudButton Variant="Variant.Text" Href="/board">Cancel</MudButton>
+    </MudStack>
+}
+
+@code {
+    [SupplyParameterFromQuery(Name = "redirect_uri")]
+    private string? RedirectUri { get; set; }
+
+    [SupplyParameterFromQuery(Name = "state")]
+    private string? State { get; set; }
+
+    [SupplyParameterFromQuery(Name = "code_challenge")]
+    private string? CodeChallenge { get; set; }
+
+    private bool _redirectIsValid;
+    private bool _busy;
+    private string _deviceName = Environment.MachineName;
+    private string _userName = string.Empty;
+    private string? _error;
+    private ulong _userId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Validated before anything renders, and a rejection never redirects: this page sends
+        // the browser to whatever it is handed, carrying a code that can be exchanged for a
+        // credential, so anything but a literal loopback address is an open redirect with
+        // somebody's identity attached.
+        _redirectIsValid = LoopbackRedirect.IsAllowed(RedirectUri) && !string.IsNullOrEmpty(CodeChallenge);
+
+        var user = (await AuthState.GetAuthenticationStateAsync()).User;
+        _userId = user.GetDiscordUserId();
+        _userName = user.GetDisplayName();
+    }
+
+    private void ApproveAsync()
+    {
+        if (!_redirectIsValid || _busy)
+        {
+            return;
+        }
+
+        _busy = true;
+        _error = null;
+
+        var code = Codes.Issue(_userId, _userName, _deviceName.Trim(), RedirectUri!, CodeChallenge!);
+
+        // The code crosses the browser, never the token. It is single-use, lives for a minute,
+        // and is worthless without the verifier the app kept to itself — so nothing that lands
+        // in history, a bookmark or a proxy log is of any use to anybody.
+        var separator = RedirectUri!.Contains('?') ? '&' : '?';
+        var target = $"{RedirectUri}{separator}code={Uri.EscapeDataString(code)}&state={Uri.EscapeDataString(State ?? string.Empty)}";
+
+        Navigation.NavigateTo(target, forceLoad: true);
+    }
+}

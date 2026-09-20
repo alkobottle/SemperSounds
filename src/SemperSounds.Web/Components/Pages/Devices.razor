@@ -1,0 +1,83 @@
+@page "/devices"
+@attribute [Authorize]
+@* Injected as Tokens, not Devices: a member may not share its enclosing type's name, and this page is Devices. *@
+@inject DeviceTokenStore Tokens
+@inject DesktopBroadcaster Broadcaster
+@inject AuthenticationStateProvider AuthState
+@inject ISnackbar Snackbar
+
+<PageTitle>Devices · SemperSounds</PageTitle>
+
+<MudText Typo="Typo.h5" GutterBottom="true">Paired devices</MudText>
+
+<MudText Typo="Typo.body2" Class="mb-4">
+    Apps signed in as you, on your own machines. Each one can play sounds and summon the bot,
+    exactly as you can here. Revoking takes effect immediately.
+</MudText>
+
+<MudTable Items="_devices" Dense="true" Hover="true" Striped="true" Elevation="2">
+    <HeaderContent>
+        <MudTh>Device</MudTh>
+        <MudTh>Paired</MudTh>
+        <MudTh>Last used</MudTh>
+        <MudTh></MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd DataLabel="Device">
+            @context.DeviceName
+            @if (context.IsRevoked)
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Default" Class="ml-2">revoked</MudChip>
+            }
+            else if (context.ExpiresAt <= DateTimeOffset.UtcNow)
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Warning" Class="ml-2">expired</MudChip>
+            }
+        </MudTd>
+        <MudTd DataLabel="Paired" Style="white-space: nowrap;">@context.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd")</MudTd>
+        <MudTd DataLabel="Last used" Style="white-space: nowrap;">@context.LastUsedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</MudTd>
+        <MudTd Style="text-align: right;">
+            @if (!context.IsRevoked)
+            {
+                <MudButton Size="Size.Small" Color="Color.Error" Variant="Variant.Text"
+                           OnClick="@(() => RevokeAsync(context.Id))">
+                    Revoke
+                </MudButton>
+            }
+        </MudTd>
+    </RowTemplate>
+    <NoRecordsContent>
+        <MudText Typo="Typo.body2">No devices are paired. Pairing starts from the desktop app.</MudText>
+    </NoRecordsContent>
+</MudTable>
+
+@code {
+    private IReadOnlyList<DeviceToken> _devices = [];
+    private ulong _userId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _userId = (await AuthState.GetAuthenticationStateAsync()).User.GetDiscordUserId();
+        _devices = await Tokens.ListAsync(_userId);
+    }
+
+    private async Task RevokeAsync(Guid id)
+    {
+        // The acting user is passed through rather than trusted from the row: hiding a button
+        // is not what stops somebody revoking another person's device, the check in the store
+        // is.
+        if (!await Tokens.RevokeAsync(id, _userId))
+        {
+            Snackbar.Add("That device could not be revoked.", Severity.Error);
+            return;
+        }
+
+        // Withdrawing the credential is not enough on its own. SignalR authenticates once, at
+        // negotiate, and then holds that principal for the life of the connection — so without
+        // this the revoked app keeps working until it happens to drop, which can be weeks.
+        await Broadcaster.AbortConnectionsFor(id);
+
+        _devices = await Tokens.ListAsync(_userId);
+        Snackbar.Add("Device revoked.", Severity.Success);
+    }
+}

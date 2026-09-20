@@ -1,6 +1,9 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/SemperSounds.Contracts/SemperSounds.Contracts.csproj" />
     <Project Path="src/SemperSounds.Core/SemperSounds.Core.csproj" />
+    <Project Path="src/SemperSounds.Desktop/SemperSounds.Desktop.csproj" />
+    <Project Path="src/SemperSounds.Desktop.Core/SemperSounds.Desktop.Core.csproj" />
     <Project Path="src/SemperSounds.Web/SemperSounds.Web.csproj" />
   </Folder>
   <Folder Name="/tests/">

@@ -5,6 +5,7 @@ WORKDIR /src
 
 # Warm the NuGet cache on project files alone, so this layer survives source edits.
 COPY SemperSounds.slnx ./
+COPY src/SemperSounds.Contracts/SemperSounds.Contracts.csproj src/SemperSounds.Contracts/
 COPY src/SemperSounds.Core/SemperSounds.Core.csproj src/SemperSounds.Core/
 COPY src/SemperSounds.Web/SemperSounds.Web.csproj src/SemperSounds.Web/
 COPY tests/SemperSounds.Tests/SemperSounds.Tests.csproj tests/SemperSounds.Tests/

@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
   <ItemGroup>
+    <ProjectReference Include="..\SemperSounds.Contracts\SemperSounds.Contracts.csproj" />
     <ProjectReference Include="..\SemperSounds.Core\SemperSounds.Core.csproj" />
   </ItemGroup>
 

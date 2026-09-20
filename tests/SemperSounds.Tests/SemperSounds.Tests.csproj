@@ -19,7 +19,9 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\src\SemperSounds.Contracts\SemperSounds.Contracts.csproj" />
     <ProjectReference Include="..\..\src\SemperSounds.Core\SemperSounds.Core.csproj" />
+    <ProjectReference Include="..\..\src\SemperSounds.Desktop.Core\SemperSounds.Desktop.Core.csproj" />
     <ProjectReference Include="..\..\src\SemperSounds.Web\SemperSounds.Web.csproj" />
   </ItemGroup>
 

@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Deliberately net10.0 and not net10.0-windows, and deliberately free of Avalonia. Everything
+    here is a decision the desktop app makes rather than something it draws or calls Win32 for,
+    which keeps it testable from the one existing test project - a net10.0 project cannot
+    reference a windows-targeting one, and splitting the tests in two would quietly become the
+    new convention.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SemperSounds.Contracts\SemperSounds.Contracts.csproj" />
+  </ItemGroup>
+
+</Project>

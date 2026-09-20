@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using Microsoft.Extensions.Options;
 using NetCord.Gateway;
 using NetCord.Gateway.Voice;
+using SemperSounds.Contracts;
 using SemperSounds.Core.Audio;
 using SemperSounds.Core.Configuration;
 using SemperSounds.Core.Data;
@@ -10,11 +11,19 @@ using SemperSounds.Core.Sounds;
 
 namespace SemperSounds.Web.Services;
 
-/// <param name="Error">Empty when the operation succeeded.</param>
-public readonly record struct PlaybackResult(bool IsSuccess, string Error)
+/// <param name="Error">Empty when the operation succeeded. User-facing prose; do not branch on it.</param>
+/// <param name="Failure">
+/// Why it was refused, as a value. Carried so a caller can decide what to do about it —
+/// notably whether summoning the bot would help — without reading <paramref name="Error"/>,
+/// which is wording that will be changed one day by somebody who has no idea anything depends
+/// on it. <see cref="Fail"/> takes it with no default for the same reason
+/// <c>SoundPlayedNotification.Kind</c> has none: a default would let a new refusal path be
+/// silently misclassified.
+/// </param>
+public readonly record struct PlaybackResult(bool IsSuccess, string Error, PlayFailure Failure)
 {
-    public static PlaybackResult Ok => new(true, string.Empty);
-    public static PlaybackResult Fail(string error) => new(false, error);
+    public static PlaybackResult Ok => new(true, string.Empty, PlayFailure.None);
+    public static PlaybackResult Fail(PlayFailure failure, string error) => new(false, error, failure);
 }
 
 /// <summary>
@@ -34,6 +43,14 @@ public sealed class PlaybackService(
     private readonly PcmMixer _mixer = new();
     private readonly SemaphoreSlim _connectionGate = new(1, 1);
     private readonly ConcurrentDictionary<ulong, DateTimeOffset> _lastPlayed = new();
+
+    /// <summary>
+    /// A floor on how fast one person can drag the bot between channels. Playing has always
+    /// had a cooldown; joining never did, because clicking a button was its own limit. A bound
+    /// key is not, and every hop is a voice reconnect — enough of them and Discord rate-limits
+    /// or drops the gateway, which shows up as the bot mysteriously going quiet.
+    /// </summary>
+    private readonly UserThrottle _joinThrottle = new(TimeSpan.FromSeconds(2));
 
     private VoiceClient? _voiceClient;
     private Stream? _audioStream;
@@ -70,12 +87,20 @@ public sealed class PlaybackService(
     {
         if (!bot.IsReady)
         {
-            return PlaybackResult.Fail("The bot is not connected to Discord yet. Try again in a moment.");
+            return PlaybackResult.Fail(PlayFailure.Other, "The bot is not connected to Discord yet. Try again in a moment.");
         }
 
         if (voiceStates.GetChannelOf(userId) is not { } channelId)
         {
-            return PlaybackResult.Fail("Join a voice channel first, then press Join again.");
+            return PlaybackResult.Fail(PlayFailure.NotInVoice, "Join a voice channel first, then press Join again.");
+        }
+
+        // Checked before the gate, so a held-down key queues nothing. Leaving is deliberately
+        // not throttled: it is the join at the far end of a leave/join loop that costs a
+        // reconnect, so bounding joins already bounds the churn.
+        if (ConnectedChannelId != channelId && !_joinThrottle.TryAcquire(userId, out var wait))
+        {
+            return PlaybackResult.Fail(PlayFailure.Other, $"Give it a second — {wait.TotalSeconds:0.#}s to go.");
         }
 
         await _connectionGate.WaitAsync(cancellationToken);
@@ -130,7 +155,7 @@ public sealed class PlaybackService(
         {
             logger.LogError(ex, "Failed to join voice channel");
             await DisconnectCoreAsync();
-            return PlaybackResult.Fail($"Could not join the voice channel: {ex.Message}");
+            return PlaybackResult.Fail(PlayFailure.Other, $"Could not join the voice channel: {ex.Message}");
         }
         finally
         {
@@ -178,17 +203,17 @@ public sealed class PlaybackService(
     {
         if (ConnectedChannelId is not { } channelId)
         {
-            return PlaybackResult.Fail("The bot is not in a voice channel. Press Join first.");
+            return PlaybackResult.Fail(PlayFailure.BotAbsent, "The bot is not in a voice channel. Press Join first.");
         }
 
         if (!voiceStates.IsInChannel(userId, channelId))
         {
-            return PlaybackResult.Fail("You have to be in the same voice channel as the bot to play sounds.");
+            return PlaybackResult.Fail(PlayFailure.WrongChannel, "You have to be in the same voice channel as the bot to play sounds.");
         }
 
         if (IsOnCooldown(userId, out var remaining))
         {
-            return PlaybackResult.Fail($"Slow down — {remaining.TotalSeconds:0.#}s to go.");
+            return PlaybackResult.Fail(PlayFailure.Cooldown, $"Slow down — {remaining.TotalSeconds:0.#}s to go.");
         }
 
         using var scope = scopeFactory.CreateScope();
@@ -197,14 +222,14 @@ public sealed class PlaybackService(
         var sound = await library.FindAsync(soundId, cancellationToken);
         if (sound is null)
         {
-            return PlaybackResult.Fail("That sound no longer exists.");
+            return PlaybackResult.Fail(PlayFailure.Missing, "That sound no longer exists.");
         }
 
         var pcm = await library.ReadPcmAsync(sound, cancellationToken);
         if (pcm is null)
         {
             logger.LogWarning("Audio file missing for sound {SoundId} ({Name})", sound.Id, sound.Name);
-            return PlaybackResult.Fail("That sound's audio file is missing.");
+            return PlaybackResult.Fail(PlayFailure.Missing, "That sound's audio file is missing.");
         }
 
         _mixer.Add(pcm, sound.Id);
@@ -247,7 +272,7 @@ public sealed class PlaybackService(
     {
         if (ConnectedChannelId != channelId)
         {
-            return PlaybackResult.Fail("The bot is not in that channel.");
+            return PlaybackResult.Fail(PlayFailure.WrongChannel, "The bot is not in that channel.");
         }
 
         using var scope = scopeFactory.CreateScope();
@@ -257,27 +282,27 @@ public sealed class PlaybackService(
         var assignment = await entrySounds.FindAsync(userId, cancellationToken);
         if (assignment?.SoundId != soundId)
         {
-            return PlaybackResult.Fail("That is not this user's entry sound.");
+            return PlaybackResult.Fail(PlayFailure.Other, "That is not this user's entry sound.");
         }
 
         var sound = await library.FindAsync(soundId, cancellationToken);
         if (sound is null)
         {
-            return PlaybackResult.Fail("That sound no longer exists.");
+            return PlaybackResult.Fail(PlayFailure.Missing, "That sound no longer exists.");
         }
 
         var pcm = await library.ReadPcmAsync(sound, cancellationToken);
         if (pcm is null)
         {
             logger.LogWarning("Audio file missing for sound {SoundId} ({Name})", sound.Id, sound.Name);
-            return PlaybackResult.Fail("That sound's audio file is missing.");
+            return PlaybackResult.Fail(PlayFailure.Missing, "That sound's audio file is missing.");
         }
 
         // Re-checked after the disk read: a Leave landing in that window would otherwise
         // spill this clip into whatever channel the bot moved to next.
         if (ConnectedChannelId != channelId)
         {
-            return PlaybackResult.Fail("The bot left that channel.");
+            return PlaybackResult.Fail(PlayFailure.WrongChannel, "The bot left that channel.");
         }
 
         _mixer.Add(pcm, sound.Id, gain);

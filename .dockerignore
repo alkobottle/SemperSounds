@@ -13,3 +13,7 @@ data/
 **/appsettings.Local.json
 docs/
 README.md
+
+# Windows-only desktop client: never published by the container, and a net10.0-windows
+# project in the build context is one solution-wide build away from failing on Linux.
+src/SemperSounds.Desktop/

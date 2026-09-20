@@ -1,0 +1,88 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:SemperSounds.Desktop.ViewModels"
+        x:Class="SemperSounds.Desktop.Views.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Title="SemperSounds" Width="680" Height="620" MinWidth="520" MinHeight="420"
+        WindowStartupLocation="CenterScreen"
+        Icon="avares://SemperSounds.Desktop/Assets/tray.ico">
+
+    <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="16">
+
+        <!-- Status and the bot -->
+        <Border Grid.Row="0" Padding="12,10" CornerRadius="6" Background="#1AFFFFFF">
+            <Grid ColumnDefinitions="*,Auto">
+                <StackPanel Spacing="1">
+                    <TextBlock Text="{Binding StatusText}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Text="Hotkeys pass through — a bound key still works in your game."
+                               FontSize="11" Opacity="0.6" />
+                </StackPanel>
+                <Button Grid.Column="1" Content="Summon / dismiss" Click="OnSummon"
+                        IsEnabled="{Binding IsPaired}" />
+            </Grid>
+        </Border>
+
+        <!-- Elevation warning: only when the hook is actually blind to the window in front -->
+        <Border Grid.Row="1" Margin="0,8,0,0" Padding="12,10" CornerRadius="6"
+                Background="#33FFB020" IsVisible="{Binding NeedsElevation}">
+            <Grid ColumnDefinitions="*,Auto">
+                <StackPanel Spacing="1">
+                    <TextBlock Text="A window in front is running as administrator" FontWeight="SemiBold" />
+                    <TextBlock Text="Windows will not let this app see keys going to it, so hotkeys do nothing there."
+                               FontSize="11" Opacity="0.75" TextWrapping="Wrap" />
+                </StackPanel>
+                <Button Grid.Column="1" Content="Restart as admin" Click="OnRelaunch" VerticalAlignment="Center" />
+            </Grid>
+        </Border>
+
+        <!-- Sounds -->
+        <Grid Grid.Row="2" RowDefinitions="Auto,*" Margin="0,12,0,0">
+            <TextBox Grid.Row="0" PlaceholderText="Search sounds" Text="{Binding Search}" Margin="0,0,0,8" />
+
+            <ListBox Grid.Row="1" ItemsSource="{Binding Visible}" SelectionMode="Single">
+                <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="vm:SoundRow">
+                        <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" Height="30">
+                            <TextBlock Grid.Column="0" Text="{Binding Emoji}" FontSize="15" VerticalAlignment="Center" Width="26" />
+                            <TextBlock Grid.Column="1" Text="{Binding Name}" VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis" />
+                            <TextBlock Grid.Column="2" Text="{Binding Duration}" FontSize="11" Opacity="0.55"
+                                       VerticalAlignment="Center" Margin="8,0" />
+                            <Button Grid.Column="3" Content="{Binding ChordText}" Click="OnCapture" Tag="{Binding}"
+                                    MinWidth="120" FontSize="12" Padding="8,3" />
+                            <Button Grid.Column="4" Content="✕" Click="OnClear" Tag="{Binding}" Padding="6,3"
+                                    FontSize="11" IsVisible="{Binding HasChord}" Margin="4,0,0,0" />
+                        </Grid>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+        </Grid>
+
+        <!-- Settings -->
+        <Expander Grid.Row="3" Header="Settings" Margin="0,12,0,0">
+            <StackPanel Spacing="6" Margin="0,8,0,0">
+
+                <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+                    <TextBox Text="{Binding ServerUrl}" PlaceholderText="https://sounds.example" />
+                    <Button Grid.Column="1" Content="Pair this device" Click="OnPair" IsEnabled="{Binding !IsBusy}" />
+                    <Button Grid.Column="2" Content="Unpair" Click="OnUnpair" IsVisible="{Binding IsPaired}" />
+                </Grid>
+
+                <TextBlock Text="{Binding PairingMessage}" FontSize="11" Opacity="0.7" TextWrapping="Wrap"
+                           IsVisible="{Binding PairingMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+
+                <WrapPanel>
+                    <CheckBox Content="Summon the bot automatically" IsChecked="{Binding AutoSummon}" Margin="0,0,16,0" />
+                    <CheckBox Content="Sound on failure" IsChecked="{Binding PlayAudioCue}" Margin="0,0,16,0" />
+                    <CheckBox Content="On-screen popup" IsChecked="{Binding ShowOverlay}" Margin="0,0,16,0" />
+                    <CheckBox Content="Start with Windows" IsChecked="{Binding RunAtStartup}" Margin="0,0,16,0" />
+                    <CheckBox Content="Start in the tray" IsChecked="{Binding StartMinimised}" />
+                </WrapPanel>
+
+                <TextBlock Text="The popup cannot draw over a game in exclusive fullscreen; the sound always works."
+                           FontSize="11" Opacity="0.55" TextWrapping="Wrap" />
+            </StackPanel>
+        </Expander>
+    </Grid>
+
+</Window>

@@ -22,6 +22,7 @@ public sealed class SoundboardDbContext(DbContextOptions<SoundboardDbContext> op
     public DbSet<EntrySoundBlock> EntrySoundBlocks => Set<EntrySoundBlock>();
     public DbSet<EntrySoundSettings> EntrySoundSettings => Set<EntrySoundSettings>();
     public DbSet<UserPreference> UserPreferences => Set<UserPreference>();
+    public DbSet<DeviceToken> DeviceTokens => Set<DeviceToken>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -128,6 +129,24 @@ public sealed class SoundboardDbContext(DbContextOptions<SoundboardDbContext> op
             // at once would otherwise leave the user with two rows and a coin flip over which
             // one loads. It doubles as the index every read uses.
             entity.HasIndex(p => new { p.UserId, p.Key }).IsUnique();
+        });
+
+        modelBuilder.Entity<DeviceToken>(entity =>
+        {
+            entity.HasKey(d => d.Id);
+            entity.Property(d => d.UserId).HasConversion<long>();
+            entity.Property(d => d.UserName).IsRequired().HasMaxLength(DeviceToken.MaxNameLength);
+            entity.Property(d => d.TokenHash).IsRequired().HasMaxLength(DeviceToken.HashLength);
+            entity.Property(d => d.DeviceName).HasMaxLength(DeviceToken.MaxNameLength);
+            entity.Property(d => d.CreatedAt).HasConversion(UtcTicksConverter);
+            entity.Property(d => d.LastUsedAt).HasConversion(UtcTicksConverter);
+            entity.Property(d => d.ExpiresAt).HasConversion(UtcTicksConverter);
+            entity.Property(d => d.RevokedAt).HasConversion(UtcTicksConverter);
+
+            // Unique because every validation is a lookup by hash, and because two rows
+            // sharing one hash would make revocation ambiguous.
+            entity.HasIndex(d => d.TokenHash).IsUnique();
+            entity.HasIndex(d => d.UserId);
         });
 
         modelBuilder.Entity<EntrySoundSettings>(entity =>

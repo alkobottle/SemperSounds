@@ -2,12 +2,15 @@ using AspNet.Security.OAuth.Discord;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using MudBlazor.Services;
 using SemperSounds.Core.Audio;
+using SemperSounds.Contracts;
 using SemperSounds.Core.Configuration;
+using SemperSounds.Core.Devices;
 using SemperSounds.Core.Data;
 using SemperSounds.Core.EntrySounds;
 using SemperSounds.Core.Preferences;
@@ -66,6 +69,7 @@ builder.Services.AddScoped<PlayStatistics>();
 builder.Services.AddScoped<EntrySoundLibrary>();
 builder.Services.AddScoped<EntrySoundAdmin>();
 builder.Services.AddScoped<UserPreferenceStore>();
+builder.Services.AddScoped<DeviceTokenStore>();
 
 // Discord side. All singletons: one gateway connection and one voice connection
 // serve every browser session.
@@ -84,12 +88,15 @@ builder.Services.AddSingleton<IGuildPermissions, GuildPermissionProvider>();
 builder.Services.AddSingleton<EntrySoundCoordinator>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<EntrySoundCoordinator>());
 
+builder.Services.AddDesktopCompanion();
+
 builder.Services.AddSemperSoundsAuthentication(builder.Configuration);
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
 builder.Services.AddMudServices();
+builder.Services.AddSignalR();
 
 var app = builder.Build();
 
@@ -132,11 +139,36 @@ if (!app.Environment.IsDevelopment())
 
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
 
+// Everything a machine talks to has to receive its own status code. The middleware above
+// re-executes any 4xx/5xx that has no body into the Blazor not-found page, which would hand
+// a paired desktop client an HTML document where it expects the 401 that tells it to pair
+// again — and burn a render doing it. ASP.NET Core 10 has no endpoint-level opt-out, only an
+// MVC filter attribute, so the feature is switched off by path right after the middleware
+// that installs it.
+app.Use((context, next) =>
+{
+    if (context.Request.Path.StartsWithSegments("/hubs") || context.Request.Path.StartsWithSegments("/api"))
+    {
+        var statusCodePages = context.Features.Get<IStatusCodePagesFeature>();
+        if (statusCodePages is not null)
+        {
+            statusCodePages.Enabled = false;
+        }
+    }
+
+    return next();
+});
+
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseAntiforgery();
 
 app.MapStaticAssets();
+
+// SkipStatusCodePages because UseStatusCodePagesWithReExecute above re-executes any bodyless
+// 4xx into the Blazor not-found page — which would hand a desktop client an HTML document in
+// place of the 401 that tells it to re-pair.
+app.MapHub<DesktopHub>(DesktopHubMethods.Route);
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
@@ -148,6 +180,36 @@ app.MapGet("/healthz", (IOptions<AppOptions> app) => Results.Ok(new
     version = app.Value.DisplayVersion,
     builtAt = app.Value.BuiltAt,
 }));
+
+// Anonymous on purpose: the caller is a desktop app that has no cookie and is not yet holding
+// any credential. What authorizes it is the one-time code, which only exists because a
+// signed-in guild member approved the pairing in their browser a moment ago, plus the verifier
+// proving this is the same app that started the flow.
+app.MapPost("/api/device/token", async (
+    DeviceTokenExchangeRequest request, DeviceCodeStore codes, DeviceTokenStore tokens, CancellationToken cancellationToken) =>
+{
+    var pending = codes.Redeem(request.Code, request.Verifier, request.RedirectUri);
+    if (pending is null)
+    {
+        // One answer for unknown, expired, already-used and wrong-verifier alike: telling a
+        // caller which of those it hit is telling it how to search.
+        return Results.Json(new { error = "That pairing code is not valid any more. Start again from the app." },
+            statusCode: StatusCodes.Status400BadRequest);
+    }
+
+    try
+    {
+        var token = await tokens.IssueAsync(pending.UserId, pending.UserName, pending.DeviceName, cancellationToken);
+
+        // The only time the plaintext exists. Everything after this works from its hash.
+        return Results.Json(new DeviceTokenExchangeResponse(token, pending.UserId.ToString(), pending.UserName));
+    }
+    catch (InvalidOperationException ex)
+    {
+        // Thrown when the user is at their device cap, which is a refusal rather than a fault.
+        return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status409Conflict);
+    }
+});
 
 app.MapGet("/login", (string? returnUrl) =>
     Results.Challenge(
@@ -181,3 +243,12 @@ app.MapGet("/sounds/{id:guid}/preview", async (
 }).RequireAuthorization();
 
 app.Run();
+
+/// <param name="Verifier">
+/// The secret half of the challenge published when the flow started. Any local process can
+/// watch the loopback port and race for the code; only the app that began pairing has this.
+/// </param>
+internal sealed record DeviceTokenExchangeRequest(string Code, string Verifier, string RedirectUri);
+
+/// <param name="UserId">A string: a Discord snowflake exceeds what a JSON number holds exactly.</param>
+internal sealed record DeviceTokenExchangeResponse(string Token, string UserId, string UserName);

@@ -85,7 +85,12 @@ public static class DiscordAuthentication
                     context.HandleResponse();
                     return Task.CompletedTask;
                 };
-            });
+            })
+            // Additive, and chained here so every scheme this app knows about is declared in
+            // one place. The cookie stays the default, so nothing about the Blazor circuits
+            // changes: this one only ever speaks up when a request carries a device token.
+            .AddScheme<DeviceTokenOptions, DeviceTokenAuthenticationHandler>(
+                DeviceTokenDefaults.Scheme, displayName: null, _ => { });
 
         // Guild roles are read live by the handler rather than baked into claims here:
         // this cookie lasts thirty days, so a role change would otherwise take that long

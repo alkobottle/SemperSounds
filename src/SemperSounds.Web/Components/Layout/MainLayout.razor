@@ -43,9 +43,11 @@
                                  Label="History"
                                  Color="Color.Inherit"
                                  Dense="true"
-                                 Class="@(NavDestination.ClassForGroup(_path, "/log", "/stats"))">
+                                 Class="@(NavDestination.ClassForGroup(_path, "/log", "/stats", "/devices"))">
                             <MudMenuItem Href="/log" Icon="@Icons.Material.Filled.History" Class="@(ActiveClass("/log"))">Log</MudMenuItem>
                             <MudMenuItem Href="/stats" Icon="@Icons.Material.Filled.Leaderboard" Class="@(ActiveClass("/stats"))">Stats</MudMenuItem>
+                            @* Shares this menu rather than taking a slot: the desktop bar is already near its width budget. *@
+                            <MudMenuItem Href="/devices" Icon="@Icons.Material.Filled.Devices" Class="@(ActiveClass("/devices"))">Devices</MudMenuItem>
                         </MudMenu>
                     </div>
                 </MudHidden>
@@ -63,6 +65,7 @@
                         <MudMenuItem Href="/entry-sound" Icon="@Icons.Material.Filled.SensorDoor" Class="@(ActiveClass("/entry-sound"))">Entry sound</MudMenuItem>
                         <MudMenuItem Href="/log" Icon="@Icons.Material.Filled.History" Class="@(ActiveClass("/log"))">Log</MudMenuItem>
                         <MudMenuItem Href="/stats" Icon="@Icons.Material.Filled.Leaderboard" Class="@(ActiveClass("/stats"))">Stats</MudMenuItem>
+                        <MudMenuItem Href="/devices" Icon="@Icons.Material.Filled.Devices" Class="@(ActiveClass("/devices"))">Devices</MudMenuItem>
                     </MudMenu>
                 </MudHidden>
 
